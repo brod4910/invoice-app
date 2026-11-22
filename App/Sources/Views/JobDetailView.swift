@@ -11,6 +11,7 @@ struct JobDetailView: View {
     @State private var showRecorder = false
     @State private var editingItem: LineItem?
     @State private var editingClient = false
+    @State private var pickingClient = false
     @State private var showMerge = false
     @State private var showInvoice = false
     @State private var confirmDelete = false
@@ -19,14 +20,26 @@ struct JobDetailView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
+                    if job.needsClientChoice {
+                        Button { pickingClient = true } label: {
+                            Label("Which client is this? Tap to choose.", systemImage: "questionmark.circle.fill")
+                                .font(.title3.bold())
+                                .foregroundStyle(.orange)
+                        }
+                        .buttonStyle(.plain)
+                    }
                     Button { editingClient = true } label: {
                         HStack {
-                            Text(job.client?.name.isEmpty == false ? job.client!.name : "Add client name")
+                            Text(job.client?.name.isEmpty == false ? job.client!.name
+                                 : (job.needsClientChoice ? job.displayTitle : "Add client name"))
                                 .font(.title.bold())
                             Image(systemName: "pencil").foregroundStyle(.secondary)
                         }
                     }
                     .buttonStyle(.plain)
+                    if job.client == nil && !job.needsClientChoice {
+                        Button("Pick a past client") { pickingClient = true }.font(.title3)
+                    }
                     if !job.displayAddress.isEmpty {
                         Label(job.displayAddress, systemImage: "mappin.and.ellipse")
                             .font(.title3)
@@ -110,6 +123,7 @@ struct JobDetailView: View {
         }
         .sheet(item: $editingItem) { LineItemEditor(item: $0) }
         .sheet(isPresented: $editingClient) { ClientEditor(job: job) }
+        .sheet(isPresented: $pickingClient) { ClientPickerView(job: job) }
         .sheet(isPresented: $showMerge) { MergePickerView(target: job) }
         .navigationDestination(isPresented: $showInvoice) { InvoicePreviewView(job: job) }
         .fullScreenCover(isPresented: $showRecorder) {

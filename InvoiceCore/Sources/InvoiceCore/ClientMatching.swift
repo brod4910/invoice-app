@@ -8,6 +8,21 @@ public enum ClientMatching {
         return String(kept).split(separator: " ").joined(separator: " ")
     }
 
+    /// Indices of every known client whose name matches `spoken`: exact matches if there are any,
+    /// otherwise names where one contains the other ("Mrs Johnson" vs "Johnson").
+    public static func candidates(for spoken: String, in known: [String]) -> [Int] {
+        let target = normalize(spoken)
+        guard !target.isEmpty else { return [] }
+        let normalized = known.map(normalize)
+        let exact = normalized.indices.filter { normalized[$0] == target }
+        if !exact.isEmpty { return exact }
+        return normalized.indices.filter { i in
+            let n = normalized[i]
+            guard !n.isEmpty else { return false }
+            return wordsContain(n, target) || wordsContain(target, n)
+        }
+    }
+
     /// Returns the index of the known client that matches `spoken`, if any.
     /// Matches exact normalized names, then names where one contains the other
     /// ("Mrs Johnson" vs "Johnson"), but only when that is unambiguous.

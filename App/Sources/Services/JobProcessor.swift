@@ -80,14 +80,12 @@ final class JobProcessor {
     }
 
     private func apply(_ result: ExtractionResult, to job: Job, from recording: Recording) {
-        if job.client == nil, let spoken = result.clientName, !spoken.isEmpty {
-            job.client = findOrCreateClient(named: spoken)
-        }
+        if job.address.isEmpty, let address = result.jobAddress { job.address = address }
+        if job.client == nil { resolveClient(for: job, spokenName: result.clientName) }
         if let client = job.client {
             if client.email.isEmpty, let email = result.clientEmail { client.email = email }
             if client.phone.isEmpty, let phone = result.clientPhone { client.phone = phone }
         }
-        if job.address.isEmpty, let address = result.jobAddress { job.address = address }
         if job.title.isEmpty, let title = result.jobTitle { job.title = title }
         if let notes = result.notes, !notes.isEmpty {
             job.notes = job.notes.isEmpty ? notes : job.notes + "\n" + notes
@@ -114,13 +112,41 @@ final class JobProcessor {
         ((try? context.fetch(FetchDescriptor<Client>())) ?? []).map(\.name)
     }
 
-    private func findOrCreateClient(named spoken: String) -> Client {
-        let clients = (try? context.fetch(FetchDescriptor<Client>())) ?? []
-        if let index = ClientMatching.bestMatch(for: spoken, in: clients.map(\.name)) {
-            return clients[index]
+    /// Links the job to a past client when the name and/or address make it clear who it is.
+    /// When it isn't clear, the job keeps the spoken name but no client, so the email stays blank
+    /// and the job screen asks which client it is.
+    private func resolveClient(for job: Job, spokenName: String?) {
+        let clients = ((try? context.fetch(FetchDescriptor<Client>())) ?? []).filter { !$0.name.isEmpty }
+        let history = clients.map { client in
+            ClientRecord(
+                id: client.id,
+                name: client.name,
+                addresses: client.jobs.filter { $0.id != job.id }.map(\.address) + [client.address]
+            )
         }
-        let client = Client(name: spoken)
-        context.insert(client)
-        return client
+        var name = spokenName?.trimmingCharacters(in: .whitespaces) ?? ""
+        // A follow-up recording without a name keeps the name said earlier.
+        if name.isEmpty, job.clientNameHint != "Unknown client" { name = job.clientNameHint }
+
+        switch ClientResolver.resolve(name: name, address: job.address, history: history) {
+        case .existing(let id):
+            guard let client = clients.first(where: { $0.id == id }) else { return }
+            job.client = client
+            job.clientNameHint = ""
+            // Repeat job, no address said: use the client's address if they've only ever had one.
+            if job.address.isEmpty, let record = history.first(where: { $0.id == id }),
+               let usual = ClientResolver.usualAddress(of: record) {
+                job.address = usual
+            }
+        case .new:
+            let client = Client(name: name)
+            context.insert(client)
+            job.client = client
+            job.clientNameHint = ""
+        case .ambiguous:
+            job.clientNameHint = name.isEmpty ? "Unknown client" : name
+        case .unknown:
+            break
+        }
     }
 }

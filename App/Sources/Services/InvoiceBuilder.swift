@@ -9,7 +9,7 @@ enum InvoiceBuilder {
             number: number,
             date: Date(),
             business: BusinessSettings.info,
-            clientName: job.client?.name ?? "",
+            clientName: job.client?.name ?? (job.clientNameHint == "Unknown client" ? "" : job.clientNameHint),
             clientEmail: job.client?.email,
             jobAddress: job.address.isEmpty ? job.client?.address : job.address,
             jobTitle: job.title,
@@ -28,7 +28,11 @@ enum InvoiceBuilder {
     /// Problems worth showing before drafting. Empty means good to go.
     static func warnings(for job: Job) -> [String] {
         var out: [String] = []
-        if job.client == nil || job.client?.name.isEmpty == true { out.append("Who is this for? Add the client's name.") }
+        if job.needsClientChoice {
+            out.append("It isn't clear which client this is, so the email is left blank. Tap the name to choose.")
+        } else if job.client == nil || job.client?.name.isEmpty == true {
+            out.append("Who is this for? Add the client's name.")
+        }
         if !EmailAddress.isPlausible(job.client?.email) { out.append("The client's email address is missing or looks wrong.") }
         if job.items.isEmpty { out.append("There are no items on this job.") }
         if job.hasMissingPrices { out.append("Some items don't have a price yet.") }

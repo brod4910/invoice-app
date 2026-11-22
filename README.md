@@ -71,6 +71,7 @@ Open **Settings** (gear icon, top right) and fill in the business name, phone, p
 
 - **Record a job:** the big red button. Say who it was for, their email, what you did, and the price of each part.
 - **Stopped by accident?** Tap **Oops, keep talking** right away, or later open the job and tap **Add more to this job**.
+- **Repeat clients:** say the client's name, the address, or both. If they match one past client, the job is linked to them and their email is filled in. A repeat client with only one past address gets that address automatically. If it's unclear (two clients with that name, or the name and address belong to different clients), the email is left blank and the job asks **Which client is this?**
 - **Fix anything:** tap an item to change it, or tap the client name.
 - **Two jobs that should be one:** the jobs list suggests combining jobs for the same client on the same day, or use **⋯ → Combine with another job**.
 - **Send the invoice:** **Make invoice → Put in Gmail drafts**, then open Gmail, check it, and press Send.

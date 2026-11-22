@@ -242,3 +242,69 @@ final class SpokenFieldsTests: XCTestCase {
         XCTAssertEqual(out.jobAddress, "12 Oak St")
     }
 }
+
+final class ClientResolverTests: XCTestCase {
+    let mary = ClientRecord(id: UUID(), name: "Mary Johnson", addresses: ["12 Oak Street, Springfield"])
+    let bob = ClientRecord(id: UUID(), name: "Bob's Diner", addresses: ["9 Pine Rd", "40 Main St"])
+    let maryJones = ClientRecord(id: UUID(), name: "Mary Jones", addresses: ["7 Elm Ave"])
+    var history: [ClientRecord] { [mary, bob, maryJones] }
+
+    func testRepeatClientByName() {
+        XCTAssertEqual(ClientResolver.resolve(name: "mary johnson", address: nil, history: history), .existing(mary.id))
+    }
+
+    func testRepeatClientAtNewAddress() {
+        XCTAssertEqual(ClientResolver.resolve(name: "Mary Johnson", address: "99 Lake Dr", history: history), .existing(mary.id))
+    }
+
+    func testAddressOnlyFindsClient() {
+        XCTAssertEqual(ClientResolver.resolve(name: nil, address: "12 Oak St", history: history), .existing(mary.id))
+    }
+
+    func testNewClient() {
+        XCTAssertEqual(ClientResolver.resolve(name: "Tom Lee", address: "1 New Rd", history: history), .new)
+    }
+
+    func testAmbiguousFirstName() {
+        guard case .ambiguous(let ids) = ClientResolver.resolve(name: "Mary", address: nil, history: history) else {
+            return XCTFail("expected ambiguous")
+        }
+        XCTAssertEqual(Set(ids), [mary.id, maryJones.id])
+    }
+
+    func testFirstNamePlusAddressSettlesIt() {
+        XCTAssertEqual(ClientResolver.resolve(name: "Mary", address: "7 Elm Avenue", history: history), .existing(maryJones.id))
+    }
+
+    func testNameAndAddressDisagree() {
+        guard case .ambiguous = ClientResolver.resolve(name: "Mary Johnson", address: "9 Pine Road", history: history) else {
+            return XCTFail("expected ambiguous")
+        }
+    }
+
+    func testTwoClientsAtOneAddress() {
+        let tenant = ClientRecord(id: UUID(), name: "Ann Lee", addresses: ["12 Oak St"])
+        guard case .ambiguous = ClientResolver.resolve(name: nil, address: "12 Oak St", history: history + [tenant]) else {
+            return XCTFail("expected ambiguous")
+        }
+    }
+
+    func testNothingToGoOn() {
+        XCTAssertEqual(ClientResolver.resolve(name: nil, address: "5 Unknown Ln", history: history), .unknown)
+        XCTAssertEqual(ClientResolver.resolve(name: nil, address: nil, history: history), .unknown)
+    }
+
+    func testUsualAddress() {
+        XCTAssertEqual(ClientResolver.usualAddress(of: mary), "12 Oak Street, Springfield")
+        XCTAssertNil(ClientResolver.usualAddress(of: bob))
+        let repeatSame = ClientRecord(id: UUID(), name: "X", addresses: ["12 Oak St", "12 Oak Street"])
+        XCTAssertEqual(ClientResolver.usualAddress(of: repeatSame), "12 Oak St")
+    }
+
+    func testAddressMatching() {
+        XCTAssertTrue(AddressMatching.same("12 Oak Street", "12 oak st."))
+        XCTAssertTrue(AddressMatching.same("12 Oak St", "12 Oak Street, Springfield"))
+        XCTAssertFalse(AddressMatching.same("12 Oak St", "120 Oak St"))
+        XCTAssertFalse(AddressMatching.same("Oak St", "Oak St Springfield"))
+    }
+}

@@ -39,6 +39,9 @@ final class Job {
     var title: String = ""
     var address: String = ""
     var notes: String = ""
+    /// The spoken client name when it couldn't be matched to one past client (ambiguous).
+    /// Non-empty means the job screen asks "Which client is this?".
+    var clientNameHint: String = ""
     var statusRaw: String = JobStatus.draft.rawValue
     var client: Client?
     @Relationship(deleteRule: .cascade, inverse: \Recording.job) var recordings: [Recording] = []
@@ -65,6 +68,7 @@ final class Job {
 
     var displayTitle: String {
         if let name = client?.name, !name.isEmpty { return name }
+        if !clientNameHint.isEmpty { return clientNameHint }
         if !title.isEmpty { return title }
         return "New job"
     }
@@ -74,6 +78,8 @@ final class Job {
         if !address.isEmpty { return address }
         return client?.address ?? ""
     }
+
+    var needsClientChoice: Bool { client == nil && !clientNameHint.isEmpty }
 
     var isProcessing: Bool { recordings.contains { $0.state == .transcribing || $0.state == .extracting } }
 }

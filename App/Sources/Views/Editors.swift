@@ -91,7 +91,7 @@ struct ClientEditor: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             }
             .onAppear {
-                name = job.client?.name ?? ""
+                name = job.client?.name ?? (job.clientNameHint == "Unknown client" ? "" : job.clientNameHint)
                 email = job.client?.email ?? ""
                 phone = job.client?.phone ?? ""
                 address = job.address
@@ -112,6 +112,84 @@ struct ClientEditor: View {
             client.phone = phone
         }
         job.address = address
+        if job.client != nil { job.clientNameHint = "" }
+        try? context.save()
+        dismiss()
+    }
+}
+
+/// Pick which past client a job is for. Shown when the app couldn't tell on its own.
+struct ClientPickerView: View {
+    @Bindable var job: Job
+    @Query(sort: \Client.name) private var clients: [Client]
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
+    @State private var search = ""
+
+    private var hint: String { job.clientNameHint == "Unknown client" ? "" : job.clientNameHint }
+
+    private var filtered: [Client] {
+        let named = clients.filter { !$0.name.isEmpty }
+        let query = search.isEmpty ? hint : search
+        guard !query.isEmpty else { return named }
+        let matches = ClientMatching.candidates(for: query, in: named.map(\.name)).map { named[$0] }
+        // If the spoken name matches nobody, show everyone rather than an empty list.
+        return matches.isEmpty && search.isEmpty ? named : matches
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if !hint.isEmpty {
+                    Section {
+                        Button {
+                            let client = Client(name: hint)
+                            context.insert(client)
+                            choose(client)
+                        } label: {
+                            Label("New client named \(hint)", systemImage: "person.badge.plus").font(.title3)
+                        }
+                    }
+                }
+                Section("Past clients") {
+                    ForEach(filtered) { client in
+                        Button { choose(client) } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(client.name).font(.title3.bold())
+                                if !client.email.isEmpty { Text(client.email).foregroundStyle(.secondary) }
+                                ForEach(addresses(of: client), id: \.self) { address in
+                                    Label(address, systemImage: "mappin.and.ellipse")
+                                        .font(.callout)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .searchable(text: $search, prompt: "Search clients")
+            .navigationTitle("Which client?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+        }
+    }
+
+    private func addresses(of client: Client) -> [String] {
+        var out: [String] = []
+        for address in client.jobs.map(\.address) + [client.address] where !address.isEmpty {
+            if !out.contains(where: { AddressMatching.same($0, address) }) { out.append(address) }
+        }
+        return Array(out.prefix(3))
+    }
+
+    private func choose(_ client: Client) {
+        job.client = client
+        job.clientNameHint = ""
+        if job.address.isEmpty {
+            let record = ClientRecord(id: client.id, name: client.name, addresses: addresses(of: client))
+            if let usual = ClientResolver.usualAddress(of: record) { job.address = usual }
+        }
         try? context.save()
         dismiss()
     }
