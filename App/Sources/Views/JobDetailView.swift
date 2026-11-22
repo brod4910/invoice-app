@@ -165,6 +165,7 @@ struct LineItemRow: View {
 struct RecordingRow: View {
     let recording: Recording
     let onRetry: () -> Void
+    @State private var typing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -174,7 +175,13 @@ struct RecordingRow: View {
                 Spacer()
                 switch recording.state {
                 case .transcribing, .extracting: ProgressView()
-                case .failed: Button("Try again", action: onRetry).buttonStyle(.bordered)
+                case .failed:
+                    HStack {
+                        if recording.transcript.isEmpty {
+                            Button("Type it") { typing = true }.buttonStyle(.bordered)
+                        }
+                        Button("Try again", action: onRetry).buttonStyle(.bordered)
+                    }
                 default: EmptyView()
                 }
             }
@@ -184,6 +191,39 @@ struct RecordingRow: View {
             if recording.state == .failed, !recording.lastError.isEmpty {
                 Text(recording.lastError).font(.footnote).foregroundStyle(.orange)
             }
+        }
+        .sheet(isPresented: $typing) {
+            TranscriptEditor(recording: recording, onSave: onRetry)
+        }
+    }
+}
+
+/// When speech-to-text can't run (e.g. in the Simulator), type what was said instead.
+/// Saving a transcript skips transcription and goes straight to pulling out the items.
+struct TranscriptEditor: View {
+    let recording: Recording
+    let onSave: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+
+    var body: some View {
+        NavigationStack {
+            TextEditor(text: $text)
+                .font(.title3)
+                .padding()
+                .navigationTitle("What was said")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            recording.transcript = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            dismiss()
+                            onSave()
+                        }
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
         }
     }
 }
