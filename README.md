@@ -10,7 +10,7 @@ An iPhone app for a self-employed tradesperson who isn't comfortable with techno
 | Speech to text | iPhone, on-device (iOS 26 SpeechAnalyzer, falls back to SFSpeechRecognizer) | `Transcriber.swift` |
 | Pull out client, items and prices | Cloudflare Worker calling Claude with structured output | `proxy/` |
 | Review, edit, add more, combine jobs | iPhone (SwiftData) | `App/Sources/Views/` |
-| Invoice email | iPhone builds HTML and plain text, Gmail API creates a draft | `InvoiceCore/`, `GmailClient.swift` |
+| Invoice email | iPhone builds HTML and plain text, Gmail API creates a draft | `InvoiceCore/`, `GmailClient.swift`, `GoogleAuth.swift` |
 
 Audio and transcripts stay on the phone. Only the transcript text goes to the extraction server, and only the finished invoice goes to Gmail. If the phone has no signal, recordings are kept and processed when the app is next opened.
 
@@ -21,7 +21,7 @@ Prices are only ever what was said out loud. An item with no spoken price shows 
 - `App/` – the SwiftUI app
 - `InvoiceCore/` – a plain Swift package with the logic that doesn't need a phone: money, invoice HTML, the email (MIME) format, client name matching, duplicate job detection. It has unit tests.
 - `proxy/` – a small Cloudflare Worker that holds the Anthropic API key so it never ships inside the app
-- `project.yml` – the Xcode project, generated with [XcodeGen](https://github.com/yonaskolb/XcodeGen)
+- `project.yml` – the Xcode project, generated with [XcodeGen](https://github.com/yonaskolb/XcodeGen). The app has no third-party dependencies; Google sign-in uses Apple's built-in web sign-in sheet.
 
 ## One-time setup
 

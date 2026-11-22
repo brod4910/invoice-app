@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import GoogleSignIn
 
 @main
 struct InvoiceApp: App {
@@ -20,7 +19,6 @@ struct InvoiceApp: App {
                 .environment(processor)
                 .environment(gmail)
                 .dynamicTypeSize(.large ... .accessibility3)
-                .onOpenURL { GIDSignIn.sharedInstance.handle($0) }
                 .task {
                     await gmail.restore()
                     await processor.retryPending()

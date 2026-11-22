@@ -10,9 +10,6 @@ configFiles:
 packages:
   InvoiceCore:
     path: InvoiceCore
-  GoogleSignIn:
-    url: https://github.com/google/GoogleSignIn-iOS
-    from: 9.0.0
 targets:
   InvoiceApp:
     type: application
@@ -21,8 +18,6 @@ targets:
       - App/Sources
     dependencies:
       - package: InvoiceCore
-      - package: GoogleSignIn
-        product: GoogleSignIn
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
@@ -38,12 +33,10 @@ targets:
     info:
       path: App/Resources/Info.plist
       properties:
-        GIDClientID: $(GOOGLE_CLIENT_ID)
+        GoogleClientID: $(GOOGLE_CLIENT_ID)
+        GoogleRedirectScheme: $(GOOGLE_REVERSED_CLIENT_ID)
         ExtractionProxyURL: $(EXTRACTION_PROXY_URL)
         ExtractionAppToken: $(EXTRACTION_APP_TOKEN)
-        CFBundleURLTypes:
-          - CFBundleURLSchemes:
-              - $(GOOGLE_REVERSED_CLIENT_ID)
   InvoiceCoreTests:
     type: bundle.unit-test
     platform: iOS
