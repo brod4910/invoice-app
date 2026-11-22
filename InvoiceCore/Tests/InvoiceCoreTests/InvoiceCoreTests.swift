@@ -195,3 +195,50 @@ final class GroundingTests: XCTestCase {
         XCTAssertEqual(ExtractionGrounding.spokenNumbers("$1,200.50 and 15."), [Decimal(string: "1200.50")!, 15])
     }
 }
+
+final class SpokenFieldsTests: XCTestCase {
+    func testClientAndAddress() {
+        let f = SpokenFields.parse("Client Mary Johnson. Address 12 Oak St, Springfield. Replaced the fence boards.")
+        XCTAssertEqual(f.client, "Mary Johnson")
+        XCTAssertEqual(f.address, "12 Oak St, Springfield")
+    }
+
+    func testCompanyWithFillerWords() {
+        let f = SpokenFields.parse("okay the client is acme plumbing and the address is 400 Elm Avenue")
+        XCTAssertEqual(f.client, "Acme Plumbing")
+        XCTAssertEqual(f.address, "400 Elm Avenue")
+    }
+
+    func testStopsAtNextLabel() {
+        let f = SpokenFields.parse("Customer: Bob's Diner address 9 Pine Road email bob at diner dot com phone 555 123 4567")
+        XCTAssertEqual(f.client, "Bob's Diner")
+        XCTAssertEqual(f.address, "9 Pine Road")
+        XCTAssertEqual(f.email, "bob@diner.com")
+        XCTAssertEqual(f.phone, "(555) 123-4567")
+    }
+
+    func testEmailWithDotsInsideIsKept() {
+        XCTAssertEqual(SpokenFields.parse("Email mary@gmail.com. Fixed sink.").email, "mary@gmail.com")
+    }
+
+    func testEmailAddressLabel() {
+        let f = SpokenFields.parse("Her email address is mary at gmail dot com. Fixed sink.")
+        XCTAssertEqual(f.email, "mary@gmail.com")
+        XCTAssertNil(f.address)
+    }
+
+    func testClientInASentenceIsNotAName() {
+        XCTAssertNil(SpokenFields.parse("The client wanted the deck stained.").client)
+    }
+
+    func testNoLabels() {
+        XCTAssertEqual(SpokenFields.parse("Fixed the gate for 40 dollars."), SpokenFields())
+    }
+
+    func testApplyOverridesModel() {
+        let model = ExtractionResult(clientName: "Marie", jobAddress: nil)
+        let out = SpokenFields(client: "Mary Johnson", address: "12 Oak St").apply(to: model)
+        XCTAssertEqual(out.clientName, "Mary Johnson")
+        XCTAssertEqual(out.jobAddress, "12 Oak St")
+    }
+}
