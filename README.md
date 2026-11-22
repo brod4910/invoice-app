@@ -8,11 +8,11 @@ An iPhone app for a self-employed tradesperson who isn't comfortable with techno
 | --- | --- | --- |
 | Record the job | iPhone | `App/Sources/Services/AudioRecorder.swift` |
 | Speech to text | iPhone, on-device (iOS 26 SpeechAnalyzer, falls back to SFSpeechRecognizer) | `Transcriber.swift` |
-| Pull out client, items and prices | Cloudflare Worker calling Claude with structured output | `proxy/` |
+| Pull out client, items and prices | iPhone, with Apple's free on-device model (Foundation Models). Optional fallback: a Cloudflare Worker calling Claude | `OnDeviceExtractor.swift`, `proxy/` |
 | Review, edit, add more, combine jobs | iPhone (SwiftData) | `App/Sources/Views/` |
 | Invoice email | iPhone builds HTML and plain text, Gmail API creates a draft | `InvoiceCore/`, `GmailClient.swift`, `GoogleAuth.swift` |
 
-Audio and transcripts stay on the phone. Only the transcript text goes to the extraction server, and only the finished invoice goes to Gmail. If the phone has no signal, recordings are kept and processed when the app is next opened.
+With Apple's on-device model, nothing leaves the phone except the finished invoice, which goes to Gmail. On-device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or newer) with it turned on in Settings. The Simulator uses your Mac's Apple Intelligence. If the phone has no signal, recordings are kept and processed when the app is next opened.
 
 Prices are only ever what was said out loud. An item with no spoken price shows an orange **Price?** tag and the invoice screen warns before drafting.
 
@@ -20,14 +20,16 @@ Prices are only ever what was said out loud. An item with no spoken price shows 
 
 - `App/` – the SwiftUI app
 - `InvoiceCore/` – a plain Swift package with the logic that doesn't need a phone: money, invoice HTML, the email (MIME) format, client name matching, duplicate job detection. It has unit tests.
-- `proxy/` – a small Cloudflare Worker that holds the Anthropic API key so it never ships inside the app
+- `proxy/` – optional. A small Cloudflare Worker that calls Claude, for phones without Apple Intelligence. It holds the Anthropic API key so it never ships inside the app
 - `project.yml` – the Xcode project, generated with [XcodeGen](https://github.com/yonaskolb/XcodeGen). The app has no third-party dependencies; Google sign-in uses Apple's built-in web sign-in sheet.
 
 ## One-time setup
 
-You need a Mac with Xcode 26, an Apple Developer account (for TestFlight), a Google account, a Cloudflare account (free tier is fine) and an Anthropic API key.
+You need a Mac with Xcode 26, an Apple Developer account (for TestFlight) and a Google account. The Cloudflare account and Anthropic API key are only needed for the optional server in step 1.
 
-### 1. Extraction server
+### 1. Extraction server (optional)
+
+Skip this if the phone has Apple Intelligence. It's only used on phones that can't run Apple's on-device model.
 
 ```sh
 cd proxy

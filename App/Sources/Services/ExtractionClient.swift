@@ -1,9 +1,21 @@
 import Foundation
 import InvoiceCore
 
-/// Sends a transcript to the extraction proxy (see /proxy) and returns structured line items.
+/// Turns a transcript into structured line items.
+/// Uses Apple's free on-device model when the phone supports it. Otherwise, if the optional
+/// Claude server in /proxy is configured, uses that.
 enum ExtractionClient {
     static func extract(_ request: ExtractionRequest) async throws -> ExtractionResult {
+        if OnDeviceExtractor.isAvailable {
+            return try await OnDeviceExtractor.extract(request)
+        }
+        guard AppConfig.extractionURL != nil else {
+            throw ExtractionError.unavailable(OnDeviceExtractor.unavailableReason ?? "Apple's on-device AI isn't available.")
+        }
+        return try await extractWithServer(request)
+    }
+
+    static func extractWithServer(_ request: ExtractionRequest) async throws -> ExtractionResult {
         guard let url = AppConfig.extractionURL else { throw ExtractionError.notConfigured }
         var http = URLRequest(url: url.appendingPathComponent("extract"))
         http.httpMethod = "POST"
@@ -23,9 +35,11 @@ enum ExtractionClient {
     enum ExtractionError: LocalizedError {
         case notConfigured, badResponse
         case server(Int, String)
+        case unavailable(String)
 
         var errorDescription: String? {
             switch self {
+            case .unavailable(let reason): reason
             case .notConfigured: "The extraction server isn't set up yet."
             case .badResponse: "Got an unexpected reply from the server."
             case .server(let code, _): "The server had a problem (\(code)). It will try again."
