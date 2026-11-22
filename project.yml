@@ -1,0 +1,64 @@
+name: InvoiceApp
+options:
+  bundleIdPrefix: com.example.invoiceapp
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/App.xcconfig
+  Release: Config/App.xcconfig
+packages:
+  InvoiceCore:
+    path: InvoiceCore
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: 9.0.0
+targets:
+  InvoiceApp:
+    type: application
+    platform: iOS
+    sources:
+      - App/Sources
+    dependencies:
+      - package: InvoiceCore
+      - package: GoogleSignIn
+        product: GoogleSignIn
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
+        DEVELOPMENT_TEAM: $(APP_TEAM_ID)
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Invoices
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "The app records you describing each job so it can write the invoice."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "The app turns your recordings into text on this iPhone."
+    info:
+      path: App/Resources/Info.plist
+      properties:
+        GIDClientID: $(GOOGLE_CLIENT_ID)
+        ExtractionProxyURL: $(EXTRACTION_PROXY_URL)
+        ExtractionAppToken: $(EXTRACTION_APP_TOKEN)
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - $(GOOGLE_REVERSED_CLIENT_ID)
+  InvoiceCoreTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - InvoiceCore/Tests/InvoiceCoreTests
+    dependencies:
+      - package: InvoiceCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  InvoiceApp:
+    build:
+      targets:
+        InvoiceApp: all
+    test:
+      targets:
+        - InvoiceCoreTests

@@ -1,0 +1,134 @@
+import InvoiceCore
+import SwiftData
+import SwiftUI
+
+/// The first screen: one big button that starts a new job.
+struct HomeView: View {
+    @Query(sort: \Job.createdAt, order: .reverse) private var jobs: [Job]
+    @State private var showRecorder = false
+    @State private var path: [Job] = []
+    @State private var permissionMessage: String?
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            ScrollView {
+                VStack(spacing: 32) {
+                    RecordButton { Task { await startRecording() } }
+                        .padding(.top, 24)
+
+                    if let permissionMessage {
+                        Text(permissionMessage)
+                            .font(.title3)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    if !jobs.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Recent jobs").font(.title2.bold())
+                            ForEach(jobs.prefix(3)) { job in
+                                NavigationLink(value: job) { JobCard(job: job) }
+                                    .buttonStyle(.plain)
+                            }
+                            NavigationLink {
+                                JobsListView()
+                            } label: {
+                                Text("See all jobs")
+                                    .font(.title3.bold())
+                                    .frame(maxWidth: .infinity, minHeight: 56)
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 32)
+            }
+            .navigationTitle("Jobs")
+            .navigationDestination(for: Job.self) { JobDetailView(job: $0) }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink { SettingsView() } label: {
+                        Image(systemName: "gearshape").accessibilityLabel("Settings")
+                    }
+                }
+            }
+            .fullScreenCover(isPresented: $showRecorder) {
+                RecordingView(existingJob: nil) { job in
+                    showRecorder = false
+                    if let job { path = [job] }
+                }
+            }
+        }
+    }
+
+    private func startRecording() async {
+        guard await AudioRecorder.requestPermission() else {
+            permissionMessage = "Please allow the microphone in Settings so the app can hear you."
+            return
+        }
+        _ = await Transcriber.requestPermission()
+        permissionMessage = nil
+        showRecorder = true
+    }
+}
+
+struct RecordButton: View {
+    var title = "Record a job"
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 16) {
+                Image(systemName: "mic.fill").font(.system(size: 72, weight: .bold))
+                Text(title).font(.largeTitle.bold())
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity)
+            .frame(height: 280)
+            .background(Color.red, in: RoundedRectangle(cornerRadius: 36))
+        }
+        .accessibilityHint("Starts recording. Talk through the job, then tap Stop.")
+    }
+}
+
+struct JobCard: View {
+    let job: Job
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(job.displayTitle).font(.title3.bold()).lineLimit(1)
+                Text(job.jobDate, format: .dateTime.month(.wide).day().year())
+                    .foregroundStyle(.secondary)
+                StatusBadge(job: job)
+            }
+            Spacer()
+            Text(Money.format(cents: job.totalCents))
+                .font(.title2.bold())
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
+    }
+}
+
+struct StatusBadge: View {
+    let job: Job
+
+    var body: some View {
+        if job.isProcessing {
+            Label("Working on it…", systemImage: "hourglass").foregroundStyle(.orange)
+        } else if job.recordings.contains(where: { $0.state == .failed }) {
+            Label("Will try again", systemImage: "exclamationmark.arrow.circlepath").foregroundStyle(.orange)
+        } else {
+            switch job.status {
+            case .draft: Label(job.status.label, systemImage: "pencil").foregroundStyle(.blue)
+            case .ready: Label(job.status.label, systemImage: "checkmark").foregroundStyle(.green)
+            case .invoiced: Label(job.status.label, systemImage: "envelope.fill").foregroundStyle(.green)
+            }
+        }
+    }
+}
