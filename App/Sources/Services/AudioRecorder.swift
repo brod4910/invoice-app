@@ -63,7 +63,10 @@ final class AudioRecorder {
         currentFileName = nil
         state = .idle
         level = 0
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        // Deactivating blocks briefly, so do it off the main thread to keep the UI responsive.
+        Task.detached {
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
         return (fileName, duration)
     }
 
