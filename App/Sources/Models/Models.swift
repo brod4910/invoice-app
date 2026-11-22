@@ -69,6 +69,12 @@ final class Job {
         return "New job"
     }
 
+    /// The job's address, or the client's address if the job has none.
+    var displayAddress: String {
+        if !address.isEmpty { return address }
+        return client?.address ?? ""
+    }
+
     var isProcessing: Bool { recordings.contains { $0.state == .transcribing || $0.state == .extracting } }
 }
 

@@ -27,6 +27,10 @@ struct JobDetailView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    if !job.displayAddress.isEmpty {
+                        Label(job.displayAddress, systemImage: "mappin.and.ellipse")
+                            .font(.title3)
+                    }
                     if let email = job.client?.email, !email.isEmpty {
                         Text(email).foregroundStyle(.secondary)
                     }

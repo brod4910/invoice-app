@@ -99,6 +99,9 @@ struct JobCard: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(job.displayTitle).font(.title3.bold()).lineLimit(1)
+                if !job.displayAddress.isEmpty {
+                    Text(job.displayAddress).lineLimit(1)
+                }
                 Text(job.jobDate, format: .dateTime.month(.wide).day().year())
                     .foregroundStyle(.secondary)
                 StatusBadge(job: job)
