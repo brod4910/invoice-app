@@ -1,0 +1,76 @@
+import Foundation
+
+/// Removes anything the AI returned that isn't backed by the transcript.
+/// Small on-device models sometimes invent plausible items and prices; this keeps only
+/// items whose words were actually said, and only prices whose number was actually said.
+public enum ExtractionGrounding {
+    public static func ground(_ result: ExtractionResult, transcript: String) -> ExtractionResult {
+        let words = Set(tokens(transcript))
+        let numbers = spokenNumbers(transcript)
+        var out = result
+
+        out.items = result.items.compactMap { item in
+            let itemWords = tokens(item.description + " " + (item.details ?? ""))
+            guard itemWords.contains(where: { isSaid($0, in: words) }) else { return nil }
+            var kept = item
+            if let cents = item.unitPriceCents, !numbers.contains(Decimal(cents) / 100) {
+                kept.unitPriceCents = nil
+            }
+            if item.quantity != 1, !numbers.contains(Decimal(item.quantity)) {
+                kept.quantity = 1
+            }
+            return kept
+        }
+
+        out.clientName = result.clientName.flatMap { name in
+            tokens(name).contains(where: { words.contains($0) }) ? name : nil
+        }
+        out.clientEmail = result.clientEmail.flatMap { email in
+            let local = email.split(separator: "@").first.map(String.init) ?? ""
+            return tokens(local).contains(where: { words.contains($0) }) ? email : nil
+        }
+        out.jobAddress = result.jobAddress.flatMap { address in
+            tokens(address).contains(where: { isSaid($0, in: words) }) ? address : nil
+        }
+        return out
+    }
+
+    /// Lowercased words of 3+ letters or digits.
+    static func tokens(_ text: String) -> [String] {
+        text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.count >= 3 }
+    }
+
+    /// A word counts as said if it appears, or shares a 5-letter stem with a said word
+    /// ("replaced" vs "replace", "boards" vs "board").
+    static func isSaid(_ word: String, in words: Set<String>) -> Bool {
+        if words.contains(word) { return true }
+        guard word.count >= 5 else { return false }
+        let stem = word.prefix(5)
+        return words.contains { $0.count >= 5 && $0.prefix(5) == stem }
+    }
+
+    /// Every number written with digits in the transcript, e.g. "$1,200.50" -> 1200.50.
+    static func spokenNumbers(_ text: String) -> Set<Decimal> {
+        var result = Set<Decimal>()
+        var current = ""
+        func flush() {
+            let cleaned = current.replacingOccurrences(of: ",", with: "")
+                .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            if !cleaned.isEmpty, let value = Decimal(string: cleaned, locale: Locale(identifier: "en_US")) {
+                result.insert(value)
+            }
+            current = ""
+        }
+        for ch in text {
+            if ch.isASCII && (ch.isNumber || ((ch == "," || ch == ".") && !current.isEmpty)) {
+                current.append(ch)
+            } else {
+                flush()
+            }
+        }
+        flush()
+        return result
+    }
+}

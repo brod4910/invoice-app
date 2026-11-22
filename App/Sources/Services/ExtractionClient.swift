@@ -6,13 +6,16 @@ import InvoiceCore
 /// Claude server in /proxy is configured, uses that.
 enum ExtractionClient {
     static func extract(_ request: ExtractionRequest) async throws -> ExtractionResult {
+        let raw: ExtractionResult
         if OnDeviceExtractor.isAvailable {
-            return try await OnDeviceExtractor.extract(request)
-        }
-        guard AppConfig.extractionURL != nil else {
+            raw = try await OnDeviceExtractor.extract(request)
+        } else if AppConfig.extractionURL != nil {
+            raw = try await extractWithServer(request)
+        } else {
             throw ExtractionError.unavailable(OnDeviceExtractor.unavailableReason ?? "Apple's on-device AI isn't available.")
         }
-        return try await extractWithServer(request)
+        // Drop anything the model made up: items, prices and names must come from what was said.
+        return ExtractionGrounding.ground(raw, transcript: request.transcript)
     }
 
     static func extractWithServer(_ request: ExtractionRequest) async throws -> ExtractionResult {

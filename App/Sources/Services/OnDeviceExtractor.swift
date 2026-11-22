@@ -45,20 +45,17 @@ enum OnDeviceExtractor {
     }
 
     static let instructions = """
-    You turn a handyman's spoken description of a finished job into invoice line items.
-    The transcript comes from speech-to-text, so expect filler words, restarts and numbers spelled out.
-    A person reviews the invoice before it is sent, so be accurate rather than complete.
+    You read a transcript of a handyman describing a job and copy out the details he said.
+    Copy only what is in the transcript. Do not add anything that is not in it.
 
     Rules:
-    - Only use prices the speaker actually says. If an item has no stated price, leave its price empty. Never guess a price.
-    - Prices are in US dollars: "a hundred and twenty five bucks" is 125, "forty an hour" is 40.
-    - For a per-unit or hourly price, set quantity to the count or hours and the price to the rate. For one total, use quantity 1.
-    - Keep descriptions short and client-friendly. Put materials, brands or sizes in details.
-    - If the speaker corrects something, use the corrected value.
-    - Write spoken email addresses normally: "mary at gmail dot com" is mary@gmail.com.
-    - If the client's name sounds like a known client, use the known spelling exactly.
-    - Return only new items, not ones already on the job.
-    - Leave a field empty if it wasn't mentioned.
+    - Every item must be something the transcript says was done or charged for. If no work is described, return no items.
+    - A price must be a number said in the transcript. If no price is said for an item, leave its price empty.
+    - Prices are US dollars. For a per-unit or hourly price, set quantity to the count or hours. Otherwise quantity is 1.
+    - Leave any field empty if the transcript does not mention it.
+    - Write spoken email addresses with @ and dots.
+    - If the client's name matches a known client, use that spelling.
+    - Do not repeat items already on the job.
     """
 }
 
@@ -72,9 +69,9 @@ struct JobNotes {
     var clientPhone: String?
     @Guide(description: "Where the job was done")
     var jobAddress: String?
-    @Guide(description: "A few words summarizing the job, e.g. Fence repair")
+    @Guide(description: "A few words summarizing the job, only if work is described")
     var jobTitle: String?
-    @Guide(description: "Each thing done or charged for, in the order mentioned")
+    @Guide(description: "Each thing the transcript says was done or charged for. Empty if none.")
     var items: [JobNotesItem]
     @Guide(description: "Anything unclear the reviewer should check")
     var notes: String?
@@ -101,11 +98,11 @@ struct JobNotes {
 
 @Generable
 struct JobNotesItem {
-    @Guide(description: "Short, client-friendly description, e.g. Replace kitchen faucet")
+    @Guide(description: "Short description of work the transcript says was done")
     var title: String
     @Guide(description: "How many units or hours; 1 if a single total")
     var quantity: Double
-    @Guide(description: "Price per unit in US dollars, only if spoken")
+    @Guide(description: "Price per unit in US dollars, only if the transcript says it")
     var priceDollars: Double?
     @Guide(description: "Materials, sizes or other specifics")
     var details: String?

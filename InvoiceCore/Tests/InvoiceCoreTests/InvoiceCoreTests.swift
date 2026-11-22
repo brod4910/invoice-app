@@ -145,3 +145,53 @@ final class EmailTests: XCTestCase {
         XCTAssertFalse(EmailAddress.isPlausible(nil))
     }
 }
+
+final class GroundingTests: XCTestCase {
+    func testDropsInventedItemsWhenOnlyAnAddressWasSaid() {
+        let transcript = "123 Main Street, Springfield"
+        let invented = ExtractionResult(
+            jobAddress: "123 Main Street, Springfield",
+            items: [
+                ExtractedItem(description: "Replace kitchen faucet", quantity: 1, unitPriceCents: 12500),
+                ExtractedItem(description: "Labor", quantity: 2, unitPriceCents: 4000),
+            ]
+        )
+        let grounded = ExtractionGrounding.ground(invented, transcript: transcript)
+        XCTAssertTrue(grounded.items.isEmpty)
+        XCTAssertEqual(grounded.jobAddress, "123 Main Street, Springfield")
+    }
+
+    func testKeepsSaidItemsAndPrices() {
+        let transcript = "Job for Mary Johnson. Replaced 12 fence boards at $15 each, and 2 hours labor at 60 an hour."
+        let result = ExtractionResult(
+            clientName: "Mary Johnson",
+            items: [
+                ExtractedItem(description: "Replace fence boards", quantity: 12, unitPriceCents: 1500),
+                ExtractedItem(description: "Labor", quantity: 2, unitPriceCents: 6000),
+            ]
+        )
+        let grounded = ExtractionGrounding.ground(result, transcript: transcript)
+        XCTAssertEqual(grounded, result)
+    }
+
+    func testClearsPriceThatWasNotSaid() {
+        let transcript = "Painted the back door"
+        let result = ExtractionResult(items: [ExtractedItem(description: "Paint back door", quantity: 1, unitPriceCents: 9900)])
+        let grounded = ExtractionGrounding.ground(result, transcript: transcript)
+        XCTAssertEqual(grounded.items.count, 1)
+        XCTAssertNil(grounded.items[0].unitPriceCents)
+    }
+
+    func testDropsInventedClient() {
+        let grounded = ExtractionGrounding.ground(
+            ExtractionResult(clientName: "John Smith", clientEmail: "john@example.com"),
+            transcript: "Fixed the gate"
+        )
+        XCTAssertNil(grounded.clientName)
+        XCTAssertNil(grounded.clientEmail)
+    }
+
+    func testSpokenNumbers() {
+        XCTAssertEqual(ExtractionGrounding.spokenNumbers("$1,200.50 and 15."), [Decimal(string: "1200.50")!, 15])
+    }
+}
