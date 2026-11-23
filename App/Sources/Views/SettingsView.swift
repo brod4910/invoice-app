@@ -34,6 +34,14 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("Accounting") {
+                NavigationLink {
+                    ExportView()
+                } label: {
+                    Label("Export for accounting", systemImage: "tablecells")
+                }
+            }
+
             Section("Business") {
                 TextField("Business name", text: $name)
                 TextField("Your name", text: $owner)

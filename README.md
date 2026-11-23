@@ -75,4 +75,5 @@ Open **Settings** (gear icon, top right) and fill in the business name, phone, p
 - **Fix anything:** tap an item to change it, or tap the client name.
 - **Two jobs that should be one:** the jobs list suggests combining jobs for the same client on the same day, or use **⋯ → Combine with another job**.
 - **Send the invoice:** **Make invoice → Put in Gmail drafts**, then open Gmail, check it, and press Send.
+- **Accounting:** Settings → **Export for accounting**. Pick a date range and share two CSV files (one row per invoice, one row per item) that open in Excel, Numbers or Google Sheets and import into most accounting software.
 - **Changed something after drafting?** The job shows **This job changed after the Gmail draft was made** with an **Update Gmail draft** button, which overwrites the same draft (same invoice number). If the draft was already sent or deleted in Gmail, a new one is made and the app says so.

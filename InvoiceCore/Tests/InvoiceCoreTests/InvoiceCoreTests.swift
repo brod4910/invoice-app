@@ -334,3 +334,44 @@ final class ClientResolverTests: XCTestCase {
         XCTAssertFalse(AddressMatching.same("Oak St", "Oak St Springfield"))
     }
 }
+
+final class AccountingExportTests: XCTestCase {
+    func makeJobs() -> [ExportJob] {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = .current
+        let nov20 = cal.date(from: DateComponents(year: 2026, month: 11, day: 20, hour: 12))!
+        let nov2 = cal.date(from: DateComponents(year: 2026, month: 11, day: 2, hour: 12))!
+        return [
+            ExportJob(invoiceNumber: 7, date: nov20, client: "Mary Johnson", email: "mary@example.com",
+                      address: "12 Oak St, Springfield", job: "Fence repair", status: "Invoiced",
+                      lines: [ExportLine(description: "Boards", details: "Cedar, 6 ft", quantity: 12, unitPriceCents: 1500),
+                              ExportLine(description: "Labor", quantity: 2.5, unitPriceCents: 6000)]),
+            ExportJob(invoiceNumber: nil, date: nov2, client: "Bob's \"Diner\"", email: "", address: "", job: "Gate",
+                      status: "Needs review", lines: [ExportLine(description: "Fix gate", quantity: 1, unitPriceCents: nil)]),
+        ]
+    }
+
+    func testInvoicesCSV() {
+        let lines = AccountingExport.invoicesCSV(makeJobs(), taxRatePercent: 0).components(separatedBy: "\r\n")
+        XCTAssertEqual(lines[0], "Invoice #,Date,Client,Email,Address,Job,Status,Subtotal,Tax,Total,Missing prices")
+        XCTAssertEqual(lines[1], ",2026-11-02,\"Bob's \"\"Diner\"\"\",,,Gate,Needs review,0.00,0.00,0.00,Yes")
+        XCTAssertEqual(lines[2], "0007,2026-11-20,Mary Johnson,mary@example.com,\"12 Oak St, Springfield\",Fence repair,Invoiced,330.00,0.00,330.00,")
+    }
+
+    func testTax() {
+        let csv = AccountingExport.invoicesCSV([makeJobs()[0]], taxRatePercent: 8.25)
+        XCTAssertTrue(csv.contains(",330.00,27.23,357.23,"))
+    }
+
+    func testLineItemsCSV() {
+        let lines = AccountingExport.lineItemsCSV(makeJobs()).components(separatedBy: "\r\n")
+        XCTAssertEqual(lines[1], ",2026-11-02,\"Bob's \"\"Diner\"\"\",Gate,Fix gate,,1,,")
+        XCTAssertEqual(lines[2], "0007,2026-11-20,Mary Johnson,Fence repair,Boards,\"Cedar, 6 ft\",12,15.00,180.00")
+        XCTAssertEqual(lines[3], "0007,2026-11-20,Mary Johnson,Fence repair,Labor,,2.50,60.00,150.00")
+    }
+
+    func testFormulaInjectionDefused() {
+        XCTAssertEqual(AccountingExport.field("=SUM(A1)"), "'=SUM(A1)")
+        XCTAssertEqual(AccountingExport.field("-12.50"), "-12.50")
+    }
+}
