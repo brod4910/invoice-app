@@ -62,6 +62,18 @@ struct JobDetailView: View {
                 .padding(.vertical, 8)
             }
 
+            Section {
+                Button { showRecorder = true } label: {
+                    Label("Add more to this job", systemImage: "mic.fill")
+                        .font(.title2.bold())
+                        .frame(maxWidth: .infinity, minHeight: 64)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .listRowInsets(EdgeInsets())
+            }
+            .listRowBackground(Color.clear)
+
             if let invoice = job.latestInvoice, !invoice.gmailDraftID.isEmpty, !InvoiceBuilder.draftIsOutOfDate(job) {
                 Section {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -133,15 +145,6 @@ struct JobDetailView: View {
             }
 
             Section {
-                Button { showRecorder = true } label: {
-                    Label("Add more to this job", systemImage: "mic.fill")
-                        .font(.title2.bold())
-                        .frame(maxWidth: .infinity, minHeight: 64)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
-                .listRowInsets(EdgeInsets())
-
                 Button { showInvoice = true } label: {
                     Label(job.latestInvoice.map { "View invoice #\(String(format: "%04d", $0.number))" } ?? "Make invoice",
                           systemImage: "envelope.fill")
