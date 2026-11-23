@@ -61,6 +61,21 @@ struct JobDetailView: View {
                 .padding(.vertical, 8)
             }
 
+            if let invoice = job.latestInvoice, !invoice.gmailDraftID.isEmpty, !InvoiceBuilder.draftIsOutOfDate(job) {
+                Section {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Invoice #\(String(format: "%04d", invoice.number)) is in Gmail drafts").font(.headline)
+                            Text("Up to date as of \(invoice.updatedAt.formatted(date: .abbreviated, time: .shortened)). Open Gmail to check it and press Send.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+
             if InvoiceBuilder.draftIsOutOfDate(job) || draftMessage != nil {
                 Section {
                     VStack(alignment: .leading, spacing: 10) {
@@ -128,7 +143,8 @@ struct JobDetailView: View {
                 .listRowInsets(EdgeInsets())
 
                 Button { showInvoice = true } label: {
-                    Label("Make invoice", systemImage: "envelope.fill")
+                    Label(job.latestInvoice.map { "View invoice #\(String(format: "%04d", $0.number))" } ?? "Make invoice",
+                          systemImage: "envelope.fill")
                         .font(.title2.bold())
                         .frame(maxWidth: .infinity, minHeight: 64)
                 }
