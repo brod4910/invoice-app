@@ -30,7 +30,13 @@ final class GmailClient {
     }
 
     /// Creates a draft and returns its Gmail draft id.
-    func createDraft(to: String?, subject: String, html: String, text: String) async throws -> String {
+    func createDraft(
+        to: String?,
+        subject: String,
+        html: String,
+        text: String,
+        attachments: [MIMEMessage.Attachment] = []
+    ) async throws -> String {
         let token: String
         do {
             token = try await GoogleAuth.shared.validAccessToken()
@@ -38,7 +44,7 @@ final class GmailClient {
             signedInEmail = nil
             throw error
         }
-        let raw = MIMEMessage.base64URL(MIMEMessage.build(to: to, subject: subject, html: html, text: text))
+        let raw = MIMEMessage.base64URL(MIMEMessage.build(to: to, subject: subject, html: html, text: text, attachments: attachments))
 
         var request = URLRequest(url: URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/drafts")!)
         request.httpMethod = "POST"

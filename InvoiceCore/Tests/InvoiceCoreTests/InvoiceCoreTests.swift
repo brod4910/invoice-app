@@ -109,6 +109,17 @@ final class InvoiceTests: XCTestCase {
         XCTAssertFalse(html.contains("Subtotal")) // no tax -> single total row
     }
 
+    func testCoverNote() {
+        var doc = makeDoc()
+        doc.business.paymentTerms = "Due within 30 days."
+        let note = InvoiceRenderer.coverNoteText(doc)
+        XCTAssertTrue(note.hasPrefix("Hello Mary,"))
+        XCTAssertTrue(note.contains("Attached is invoice #0007 for $330.00 for fence repair."))
+        XCTAssertTrue(note.contains("Due within 30 days."))
+        XCTAssertTrue(note.contains("Joe Smith"))
+        XCTAssertEqual(doc.pdfFilename, "Invoice-0007.pdf")
+    }
+
     func testPlainText() {
         let text = InvoiceRenderer.plainText(makeDoc())
         XCTAssertTrue(text.contains("INVOICE #0007"))
@@ -123,6 +134,21 @@ final class MIMETests: XCTestCase {
         XCTAssertTrue(raw.hasPrefix("To: a@b.com\r\nSubject: Invoice #0001\r\n"))
         XCTAssertTrue(raw.contains("multipart/alternative; boundary=\"XYZ\""))
         XCTAssertTrue(raw.contains("--XYZ--"))
+    }
+
+    func testPDFAttachment() {
+        let pdf = Data("%PDF-1.4 fake".utf8)
+        let raw = MIMEMessage.build(
+            to: "a@b.com", subject: "Invoice #0001", html: "<p>hi</p>", text: "hi",
+            attachments: [.init(filename: "Invoice-0001.pdf", mimeType: "application/pdf", data: pdf)],
+            boundary: "XYZ"
+        )
+        XCTAssertTrue(raw.contains("Content-Type: multipart/mixed; boundary=\"XYZ\""))
+        XCTAssertTrue(raw.contains("Content-Type: multipart/alternative; boundary=\"XYZ-alt\""))
+        XCTAssertTrue(raw.contains("Content-Disposition: attachment; filename=\"Invoice-0001.pdf\""))
+        XCTAssertTrue(raw.contains(pdf.base64EncodedString()))
+        XCTAssertTrue(raw.contains("--XYZ-alt--"))
+        XCTAssertTrue(raw.hasSuffix("--XYZ--\r\n"))
     }
 
     func testNonASCIISubjectEncoded() {

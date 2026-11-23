@@ -90,6 +90,8 @@ public struct InvoiceDocument: Equatable, Sendable {
 
     public var formattedNumber: String { String(format: "%04d", number) }
 
+    public var pdfFilename: String { "Invoice-\(formattedNumber).pdf" }
+
     public var subject: String {
         let from = business.name.isEmpty ? business.ownerName : business.name
         let base = "Invoice #\(formattedNumber)"

@@ -10,7 +10,7 @@ An iPhone app for a self-employed tradesperson who isn't comfortable with techno
 | Speech to text | iPhone, on-device (iOS 26 SpeechAnalyzer, falls back to SFSpeechRecognizer) | `Transcriber.swift` |
 | Pull out client, items and prices | iPhone, with Apple's free on-device model (Foundation Models). Optional fallback: a Cloudflare Worker calling Claude | `OnDeviceExtractor.swift`, `proxy/` |
 | Review, edit, add more, combine jobs | iPhone (SwiftData) | `App/Sources/Views/` |
-| Invoice email | iPhone builds HTML and plain text, Gmail API creates a draft | `InvoiceCore/`, `GmailClient.swift`, `GoogleAuth.swift` |
+| Invoice email | iPhone makes a PDF invoice and a short cover note; Gmail API creates a draft with the PDF attached | `InvoiceCore/`, `GmailClient.swift`, `GoogleAuth.swift` |
 
 With Apple's on-device model, nothing leaves the phone except the finished invoice, which goes to Gmail. On-device AI needs an iPhone with Apple Intelligence (iPhone 15 Pro or newer) with it turned on in Settings. The Simulator uses your Mac's Apple Intelligence. If the phone has no signal, recordings are kept and processed when the app is next opened.
 
@@ -19,7 +19,7 @@ Prices are only ever what was said out loud. An item with no spoken price shows 
 ## Layout
 
 - `App/` – the SwiftUI app
-- `InvoiceCore/` – a plain Swift package with the logic that doesn't need a phone: money, invoice HTML, the email (MIME) format, client name matching, duplicate job detection. It has unit tests.
+- `InvoiceCore/` – a plain Swift package with the logic that doesn't need a phone: money, invoice layout, the email (MIME) format with the PDF attachment, client name matching, duplicate job detection. It has unit tests.
 - `proxy/` – optional. A small Cloudflare Worker that calls Claude, for phones without Apple Intelligence. It holds the Anthropic API key so it never ships inside the app
 - `project.yml` – the Xcode project, generated with [XcodeGen](https://github.com/yonaskolb/XcodeGen). The app has no third-party dependencies; Google sign-in uses Apple's built-in web sign-in sheet.
 

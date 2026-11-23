@@ -2,33 +2,69 @@ import Foundation
 
 /// Builds an RFC 2822 email with plain-text and HTML parts, as the Gmail API expects in `message.raw`.
 public enum MIMEMessage {
+    public struct Attachment: Equatable, Sendable {
+        public var filename: String
+        public var mimeType: String
+        public var data: Data
+
+        public init(filename: String, mimeType: String, data: Data) {
+            self.filename = filename
+            self.mimeType = mimeType
+            self.data = data
+        }
+    }
+
     public static func build(
         to: String?,
         subject: String,
         html: String,
         text: String,
+        attachments: [Attachment] = [],
         boundary: String = "invoice-\(UUID().uuidString)"
     ) -> String {
         var headers: [String] = []
         if let to, !to.isEmpty { headers.append("To: \(to)") }
         headers.append("Subject: \(encodeHeader(subject))")
         headers.append("MIME-Version: 1.0")
-        headers.append("Content-Type: multipart/alternative; boundary=\"\(boundary)\"")
 
-        let body = [
-            "--\(boundary)",
+        let alternativeBoundary = attachments.isEmpty ? boundary : "\(boundary)-alt"
+        let alternative = [
+            "--\(alternativeBoundary)",
             "Content-Type: text/plain; charset=\"UTF-8\"",
             "Content-Transfer-Encoding: base64",
             "",
             wrap(Data(text.utf8).base64EncodedString()),
-            "--\(boundary)",
+            "--\(alternativeBoundary)",
             "Content-Type: text/html; charset=\"UTF-8\"",
             "Content-Transfer-Encoding: base64",
             "",
             wrap(Data(html.utf8).base64EncodedString()),
-            "--\(boundary)--",
-            "",
+            "--\(alternativeBoundary)--",
         ]
+
+        if attachments.isEmpty {
+            headers.append("Content-Type: multipart/alternative; boundary=\"\(boundary)\"")
+            return (headers + [""] + alternative + [""]).joined(separator: "\r\n")
+        }
+
+        headers.append("Content-Type: multipart/mixed; boundary=\"\(boundary)\"")
+        var body = [
+            "--\(boundary)",
+            "Content-Type: multipart/alternative; boundary=\"\(alternativeBoundary)\"",
+            "",
+        ] + alternative
+        for attachment in attachments {
+            let name = attachment.filename.replacingOccurrences(of: "\"", with: "")
+            body += [
+                "--\(boundary)",
+                "Content-Type: \(attachment.mimeType); name=\"\(name)\"",
+                "Content-Disposition: attachment; filename=\"\(name)\"",
+                "Content-Transfer-Encoding: base64",
+                "",
+                wrap(attachment.data.base64EncodedString()),
+            ]
+        }
+        body += ["--\(boundary)--", ""]
         return (headers + [""] + body).joined(separator: "\r\n")
     }
 

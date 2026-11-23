@@ -100,6 +100,31 @@ public enum InvoiceRenderer {
         return out.joined(separator: "\n")
     }
 
+    /// The short email that carries the PDF.
+    public static func coverNoteText(_ doc: InvoiceDocument) -> String {
+        let b = doc.business
+        var lines: [String] = []
+        let firstName = doc.clientName.split(separator: " ").first.map(String.init) ?? ""
+        lines.append(firstName.isEmpty ? "Hello," : "Hello \(firstName),")
+        lines.append("")
+        var main = "Attached is invoice #\(doc.formattedNumber) for \(Money.format(cents: doc.totalCents))"
+        if let title = doc.jobTitle, !title.isEmpty { main += " for \(title.prefix(1).lowercased() + title.dropFirst())" }
+        lines.append(main + ".")
+        if !b.paymentTerms.isEmpty { lines.append(""); lines.append(b.paymentTerms) }
+        lines.append("")
+        lines.append("Thank you for your business,")
+        let signature = [b.ownerName, b.name, b.phone].filter { !$0.isEmpty }
+        lines.append(contentsOf: signature)
+        return lines.joined(separator: "\n")
+    }
+
+    public static func coverNoteHTML(_ doc: InvoiceDocument) -> String {
+        let paragraphs = coverNoteText(doc).components(separatedBy: "\n\n")
+            .map { "<p style=\"margin:0 0 14px;\">\(escape($0))</p>" }
+            .joined()
+        return "<div style=\"font-family:Helvetica,Arial,sans-serif;font-size:15px;color:#222;\">\(paragraphs)</div>"
+    }
+
     // MARK: - Helpers
 
     static func escape(_ s: String) -> String {

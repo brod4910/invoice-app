@@ -1,7 +1,7 @@
 import InvoiceCore
 import SwiftData
 import SwiftUI
-import WebKit
+import PDFKit
 
 struct InvoicePreviewView: View {
     @Bindable var job: Job
@@ -31,7 +31,7 @@ struct InvoicePreviewView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            HTMLView(html: InvoiceRenderer.html(doc))
+            PDFPreview(data: InvoicePDF.make(doc))
 
             VStack(spacing: 12) {
                 if let message {
@@ -64,11 +64,13 @@ struct InvoicePreviewView: View {
         do {
             if !gmail.isSignedIn { try await gmail.signIn() }
             let to = job.client?.email
+            let pdf = MIMEMessage.Attachment(filename: doc.pdfFilename, mimeType: "application/pdf", data: InvoicePDF.make(doc))
             let id = try await gmail.createDraft(
                 to: to,
                 subject: doc.subject,
-                html: InvoiceRenderer.html(doc),
-                text: InvoiceRenderer.plainText(doc)
+                html: InvoiceRenderer.coverNoteHTML(doc),
+                text: InvoiceRenderer.coverNoteText(doc),
+                attachments: [pdf]
             )
             let isNewNumber = job.invoices.isEmpty
             let invoice = Invoice(number: doc.number, sentTo: to ?? "", gmailDraftID: id, totalCents: doc.totalCents)
@@ -86,16 +88,19 @@ struct InvoicePreviewView: View {
     }
 }
 
-private struct HTMLView: UIViewRepresentable {
-    let html: String
+/// Shows the exact PDF that will be attached.
+private struct PDFPreview: UIViewRepresentable {
+    let data: Data
 
-    func makeUIView(context: Context) -> WKWebView {
-        let view = WKWebView()
-        view.isOpaque = false
+    func makeUIView(context: Context) -> PDFView {
+        let view = PDFView()
+        view.autoScales = true
+        view.displayMode = .singlePageContinuous
+        view.backgroundColor = .secondarySystemBackground
         return view
     }
 
-    func updateUIView(_ view: WKWebView, context: Context) {
-        view.loadHTMLString(html, baseURL: nil)
+    func updateUIView(_ view: PDFView, context: Context) {
+        view.document = PDFDocument(data: data)
     }
 }
