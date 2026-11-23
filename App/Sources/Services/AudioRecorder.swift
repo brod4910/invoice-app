@@ -36,7 +36,8 @@ final class AudioRecorder {
 
     private nonisolated static func startRecorder(at url: URL) throws -> RecorderBox {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker])
+        // Record-only: the app never plays sound. Play-and-record switches the speaker on, which pops.
+        try session.setCategory(.record, mode: .default)
         try session.setActive(true)
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
