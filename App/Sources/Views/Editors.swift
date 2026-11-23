@@ -194,3 +194,83 @@ struct ClientPickerView: View {
         dismiss()
     }
 }
+
+/// A big, hard-to-miss "are you sure?" screen so a slip of the finger never deletes anything.
+struct DeleteConfirmView: View {
+    let question: String
+    let name: String
+    let detail: String?
+    let deleteLabel: String
+    let onDelete: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 28) {
+            Image(systemName: "trash.circle.fill")
+                .font(.system(size: 80))
+                .foregroundStyle(.red)
+                .padding(.top, 32)
+            Text(question)
+                .font(.largeTitle.bold())
+                .multilineTextAlignment(.center)
+            VStack(spacing: 8) {
+                Text(name)
+                    .font(.title.bold())
+                    .multilineTextAlignment(.center)
+                if let detail {
+                    Text(detail)
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            Text("This can't be undone.")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button {
+                dismiss()
+            } label: {
+                Text("No, keep it")
+                    .font(.title.bold())
+                    .frame(maxWidth: .infinity, minHeight: 80)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.blue)
+            Button {
+                // Close the pop-up first so it never redraws a deleted job or item.
+                dismiss()
+                onDelete()
+            } label: {
+                Text(deleteLabel)
+                    .font(.title.bold())
+                    .frame(maxWidth: .infinity, minHeight: 80)
+            }
+            .buttonStyle(.bordered)
+            .tint(.red)
+        }
+        .padding()
+        .presentationDetents([.large])
+    }
+}
+
+extension DeleteConfirmView {
+    static func forJob(_ job: Job, onDelete: @escaping () -> Void) -> DeleteConfirmView {
+        var parts = [job.jobDate.formatted(date: .abbreviated, time: .omitted)]
+        if !job.displayAddress.isEmpty { parts.insert(job.displayAddress, at: 0) }
+        if !job.items.isEmpty { parts.append(Money.format(cents: job.totalCents)) }
+        return DeleteConfirmView(question: "Delete this job?",
+                                 name: job.displayTitle,
+                                 detail: parts.joined(separator: "\n"),
+                                 deleteLabel: "Yes, delete job",
+                                 onDelete: onDelete)
+    }
+
+    static func forItem(_ item: LineItem, onDelete: @escaping () -> Void) -> DeleteConfirmView {
+        DeleteConfirmView(question: "Delete this item?",
+                          name: item.itemDescription.isEmpty ? "New item" : item.itemDescription,
+                          detail: item.unitPriceCents.map { Money.format(cents: $0) },
+                          deleteLabel: "Yes, delete item",
+                          onDelete: onDelete)
+    }
+}

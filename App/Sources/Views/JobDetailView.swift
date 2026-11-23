@@ -11,6 +11,7 @@ struct JobDetailView: View {
 
     @State private var showRecorder = false
     @State private var editingItem: LineItem?
+    @State private var deletingItem: LineItem?
     @State private var editingClient = false
     @State private var pickingClient = false
     @State private var showMerge = false
@@ -116,11 +117,10 @@ struct JobDetailView: View {
                 }
                 ForEach(job.sortedItems) { item in
                     LineItemRow(item: item) { editingItem = item }
-                }
-                .onDelete { offsets in
-                    let items = job.sortedItems
-                    for index in offsets { context.delete(items[index]) }
-                    try? context.save()
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button { deletingItem = item } label: { Label("Delete", systemImage: "trash") }
+                                .tint(.red)
+                        }
                 }
                 Button {
                     let item = LineItem(description: "", unitPriceCents: nil, sortIndex: (job.items.map(\.sortIndex).max() ?? -1) + 1)
@@ -181,8 +181,14 @@ struct JobDetailView: View {
         .fullScreenCover(isPresented: $showRecorder) {
             RecordingView(existingJob: job) { _ in showRecorder = false }
         }
-        .confirmationDialog("Delete this job and its recordings?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Delete job", role: .destructive) {
+        .sheet(item: $deletingItem) { item in
+            DeleteConfirmView.forItem(item) {
+                context.delete(item)
+                try? context.save()
+            }
+        }
+        .sheet(isPresented: $confirmDelete) {
+            DeleteConfirmView.forJob(job) {
                 context.delete(job)
                 try? context.save()
                 dismiss()

@@ -7,6 +7,7 @@ struct JobsListView: View {
     @Environment(\.modelContext) private var context
     @State private var pendingMerge: (keep: Job, mergeIn: Job)?
     @State private var dismissedPairs = Set<String>()
+    @State private var deletingJob: Job?
 
     var body: some View {
         List {
@@ -31,6 +32,10 @@ struct JobsListView: View {
             ForEach(jobs) { job in
                 NavigationLink { JobDetailView(job: job) } label: { JobCard(job: job) }
                     .listRowSeparator(.hidden)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button { deletingJob = job } label: { Label("Delete", systemImage: "trash") }
+                            .tint(.red)
+                    }
             }
         }
         .listStyle(.plain)
@@ -43,6 +48,12 @@ struct JobsListView: View {
         .sheet(isPresented: Binding(get: { pendingMerge != nil }, set: { if !$0 { pendingMerge = nil } })) {
             if let pair = pendingMerge {
                 MergeConfirmView(target: pair.keep, source: pair.mergeIn) { pendingMerge = nil }
+            }
+        }
+        .sheet(item: $deletingJob) { job in
+            DeleteConfirmView.forJob(job) {
+                context.delete(job)
+                try? context.save()
             }
         }
     }
