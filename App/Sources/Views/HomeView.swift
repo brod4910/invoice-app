@@ -8,12 +8,16 @@ struct HomeView: View {
     @State private var showRecorder = false
     @State private var path: [Job] = []
     @State private var permissionMessage: String?
+    @State private var deletingJob: Job?
+    @Environment(\.modelContext) private var context
 
     var body: some View {
         NavigationStack(path: $path) {
-            ScrollView {
-                VStack(spacing: 32) {
+            // A List (not a ScrollView) so the recent-job cards can be swiped to delete.
+            List {
+                Group {
                     RecordButton { Task { await startRecording() } }
+                        .buttonStyle(.plain)
                         .padding(.top, 24)
 
                     if let permissionMessage {
@@ -24,25 +28,35 @@ struct HomeView: View {
                     }
 
                     if !jobs.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Recent jobs").font(.title2.bold())
-                            ForEach(jobs.prefix(3)) { job in
-                                NavigationLink(value: job) { JobCard(job: job) }
-                                    .buttonStyle(.plain)
-                            }
-                            NavigationLink {
-                                JobsListView()
-                            } label: {
-                                Text("See all jobs")
-                                    .font(.title3.bold())
-                                    .frame(maxWidth: .infinity, minHeight: 56)
-                            }
-                            .buttonStyle(.bordered)
+                        Text("Recent jobs").font(.title2.bold())
+                            .padding(.top, 20)
+                        ForEach(jobs.prefix(3)) { job in
+                            NavigationLink(value: job) { JobCard(job: job) }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                    Button { deletingJob = job } label: { Label("Delete", systemImage: "trash") }
+                                        .tint(.red)
+                                }
                         }
+                        NavigationLink {
+                            JobsListView()
+                        } label: {
+                            Text("See all jobs")
+                                .font(.title3.bold())
+                                .frame(maxWidth: .infinity, minHeight: 56)
+                        }
+                        .buttonStyle(.bordered)
+                        .padding(.bottom, 32)
                     }
                 }
-                .padding(.horizontal)
-                .padding(.bottom, 32)
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            }
+            .listStyle(.plain)
+            .sheet(item: $deletingJob) { job in
+                DeleteConfirmView.forJob(job) {
+                    context.delete(job)
+                    try? context.save()
+                }
             }
             .navigationTitle("Jobs")
             .navigationDestination(for: Job.self) { JobDetailView(job: $0) }
