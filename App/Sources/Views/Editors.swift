@@ -259,7 +259,7 @@ extension DeleteConfirmView {
         var parts = [job.jobDate.formatted(date: .abbreviated, time: .omitted)]
         if !job.displayAddress.isEmpty { parts.insert(job.displayAddress, at: 0) }
         if !job.items.isEmpty { parts.append(Money.format(cents: job.totalCents)) }
-        return DeleteConfirmView(question: "Delete this job?",
+        return DeleteConfirmView(question: "Are you sure you want to delete this job?",
                                  name: job.displayTitle,
                                  detail: parts.joined(separator: "\n"),
                                  deleteLabel: "Yes, delete job",
@@ -267,7 +267,7 @@ extension DeleteConfirmView {
     }
 
     static func forItem(_ item: LineItem, onDelete: @escaping () -> Void) -> DeleteConfirmView {
-        DeleteConfirmView(question: "Delete this item?",
+        DeleteConfirmView(question: "Are you sure you want to delete this item?",
                           name: item.itemDescription.isEmpty ? "New item" : item.itemDescription,
                           detail: item.unitPriceCents.map { Money.format(cents: $0) },
                           deleteLabel: "Yes, delete item",
