@@ -63,29 +63,34 @@ struct JobDetailView: View {
 
             if InvoiceBuilder.draftIsOutOfDate(job) || draftMessage != nil {
                 Section {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 10) {
                         if InvoiceBuilder.draftIsOutOfDate(job) {
-                            Label("This job changed after the Gmail draft was made.", systemImage: "exclamationmark.arrow.circlepath")
-                                .font(.title3.bold())
-                                .foregroundStyle(.orange)
+                            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                                Image(systemName: "envelope.badge").foregroundStyle(.blue)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Invoice needs updating").font(.headline)
+                                    Text("You've changed this job since the invoice was saved to Gmail.")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                             Button {
                                 Task { await updateDraft() }
                             } label: {
-                                if updatingDraft {
-                                    ProgressView().frame(maxWidth: .infinity, minHeight: 56)
-                                } else {
-                                    Label("Update Gmail draft", systemImage: "envelope.badge")
-                                        .font(.title3.bold())
-                                        .frame(maxWidth: .infinity, minHeight: 56)
+                                Group {
+                                    if updatingDraft { ProgressView() } else { Text("Update invoice in Gmail") }
                                 }
+                                .font(.body.weight(.semibold))
+                                .frame(maxWidth: .infinity, minHeight: 48)
                             }
                             .buttonStyle(.borderedProminent)
-                            .tint(.orange)
                             .disabled(updatingDraft)
                         }
-                        if let draftMessage { Text(draftMessage).font(.title3) }
+                        if let draftMessage {
+                            Text(draftMessage).font(.subheadline).foregroundStyle(.secondary)
+                        }
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 4)
                 }
             }
 
