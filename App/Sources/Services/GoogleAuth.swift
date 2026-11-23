@@ -195,9 +195,10 @@ extension GoogleAuth: ASWebAuthenticationPresentationContextProviding {
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         MainActor.assumeIsolated {
             let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-            return scenes.first { $0.activationState == .foregroundActive }?.keyWindow
-                ?? scenes.first?.keyWindow
-                ?? ASPresentationAnchor()
+            guard let scene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first else {
+                preconditionFailure("Sign-in needs a visible window")
+            }
+            return scene.keyWindow ?? ASPresentationAnchor(windowScene: scene)
         }
     }
 }

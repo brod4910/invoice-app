@@ -13,7 +13,7 @@ struct InvoicePreviewView: View {
 
     /// Reuse the job's earlier invoice number if it already has one, so numbers don't skip.
     private var number: Int {
-        job.invoices.sorted { $0.createdAt < $1.createdAt }.last?.number ?? BusinessSettings.nextInvoiceNumber
+        job.latestInvoice?.number ?? BusinessSettings.nextInvoiceNumber
     }
 
     var body: some View {
@@ -44,7 +44,7 @@ struct InvoicePreviewView: View {
                     if working {
                         ProgressView().frame(maxWidth: .infinity, minHeight: 72)
                     } else {
-                        Label(succeeded ? "Draft again" : "Put in Gmail drafts", systemImage: "envelope.fill")
+                        Label(job.latestInvoice == nil ? "Put in Gmail drafts" : "Update Gmail draft", systemImage: "envelope.fill")
                             .font(.title2.bold())
                             .frame(maxWidth: .infinity, minHeight: 72)
                     }
@@ -62,25 +62,8 @@ struct InvoicePreviewView: View {
         working = true
         defer { working = false }
         do {
-            if !gmail.isSignedIn { try await gmail.signIn() }
-            let to = job.client?.email
-            let pdf = MIMEMessage.Attachment(filename: doc.pdfFilename, mimeType: "application/pdf", data: InvoicePDF.make(doc))
-            let id = try await gmail.createDraft(
-                to: to,
-                subject: doc.subject,
-                html: InvoiceRenderer.coverNoteHTML(doc),
-                text: InvoiceRenderer.coverNoteText(doc),
-                attachments: [pdf]
-            )
-            let isNewNumber = job.invoices.isEmpty
-            let invoice = Invoice(number: doc.number, sentTo: to ?? "", gmailDraftID: id, totalCents: doc.totalCents)
-            context.insert(invoice)
-            invoice.job = job
-            job.status = .invoiced
-            if isNewNumber { BusinessSettings.nextInvoiceNumber = doc.number + 1 }
-            try? context.save()
+            message = try await InvoiceBuilder.saveToGmail(job: job, gmail: gmail, context: context)
             succeeded = true
-            message = "The invoice is in your Gmail drafts. Open Gmail, check it, and press Send."
         } catch {
             succeeded = false
             message = error.localizedDescription

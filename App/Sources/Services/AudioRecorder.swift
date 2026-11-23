@@ -19,13 +19,25 @@ final class AudioRecorder {
         await AVAudioApplication.requestRecordPermission()
     }
 
-    func start() throws {
+    /// Starts recording a new clip. Turning on the microphone can block for a moment,
+    /// so that part runs off the main thread to keep the screen responsive.
+    func start() async throws {
+        let fileName = "\(UUID().uuidString).m4a"
+        let url = AudioStorage.directory.appendingPathComponent(fileName)
+        let box = try await Task.detached(priority: .userInitiated) {
+            try Self.startRecorder(at: url)
+        }.value
+        recorder = box.recorder
+        currentFileName = fileName
+        elapsed = 0
+        state = .recording
+        startTimer()
+    }
+
+    private nonisolated static func startRecorder(at url: URL) throws -> RecorderBox {
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker])
         try session.setActive(true)
-
-        let fileName = "\(UUID().uuidString).m4a"
-        let url = AudioStorage.directory.appendingPathComponent(fileName)
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
             AVSampleRateKey: 44_100,
@@ -35,11 +47,12 @@ final class AudioRecorder {
         let recorder = try AVAudioRecorder(url: url, settings: settings)
         recorder.isMeteringEnabled = true
         guard recorder.record() else { throw RecorderError.couldNotStart }
-        self.recorder = recorder
-        currentFileName = fileName
-        elapsed = 0
-        state = .recording
-        startTimer()
+        return RecorderBox(recorder: recorder)
+    }
+
+    /// Carries the recorder back to the main thread.
+    private struct RecorderBox: @unchecked Sendable {
+        let recorder: AVAudioRecorder
     }
 
     func pause() {

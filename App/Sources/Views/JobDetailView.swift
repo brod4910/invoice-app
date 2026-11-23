@@ -6,6 +6,7 @@ struct JobDetailView: View {
     @Bindable var job: Job
     @Environment(\.modelContext) private var context
     @Environment(JobProcessor.self) private var processor
+    @Environment(GmailClient.self) private var gmail
     @Environment(\.dismiss) private var dismiss
 
     @State private var showRecorder = false
@@ -15,6 +16,8 @@ struct JobDetailView: View {
     @State private var showMerge = false
     @State private var showInvoice = false
     @State private var confirmDelete = false
+    @State private var updatingDraft = false
+    @State private var draftMessage: String?
 
     var body: some View {
         List {
@@ -56,6 +59,34 @@ struct JobDetailView: View {
                     StatusBadge(job: job).font(.title3)
                 }
                 .padding(.vertical, 8)
+            }
+
+            if InvoiceBuilder.draftIsOutOfDate(job) || draftMessage != nil {
+                Section {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if InvoiceBuilder.draftIsOutOfDate(job) {
+                            Label("This job changed after the Gmail draft was made.", systemImage: "exclamationmark.arrow.circlepath")
+                                .font(.title3.bold())
+                                .foregroundStyle(.orange)
+                            Button {
+                                Task { await updateDraft() }
+                            } label: {
+                                if updatingDraft {
+                                    ProgressView().frame(maxWidth: .infinity, minHeight: 56)
+                                } else {
+                                    Label("Update Gmail draft", systemImage: "envelope.badge")
+                                        .font(.title3.bold())
+                                        .frame(maxWidth: .infinity, minHeight: 56)
+                                }
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.orange)
+                            .disabled(updatingDraft)
+                        }
+                        if let draftMessage { Text(draftMessage).font(.title3) }
+                    }
+                    .padding(.vertical, 6)
+                }
             }
 
             Section("Items") {
@@ -135,6 +166,18 @@ struct JobDetailView: View {
                 try? context.save()
                 dismiss()
             }
+        }
+    }
+}
+
+extension JobDetailView {
+    fileprivate func updateDraft() async {
+        updatingDraft = true
+        defer { updatingDraft = false }
+        do {
+            draftMessage = try await InvoiceBuilder.saveToGmail(job: job, gmail: gmail, context: context)
+        } catch {
+            draftMessage = error.localizedDescription
         }
     }
 }

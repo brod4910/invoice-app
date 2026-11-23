@@ -67,6 +67,7 @@ struct RecordingView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.red)
+            .disabled(recorder.state == .idle)
 
             Button(recorder.state == .paused ? "Resume" : "Pause") {
                 recorder.state == .paused ? recorder.resume() : recorder.pause()
@@ -104,11 +105,13 @@ struct RecordingView: View {
     }
 
     private func begin() {
-        do {
-            try recorder.start()
-            errorMessage = nil
-        } catch {
-            errorMessage = error.localizedDescription
+        Task {
+            do {
+                try await recorder.start()
+                errorMessage = nil
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 

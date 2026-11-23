@@ -79,6 +79,9 @@ final class Job {
         return client?.address ?? ""
     }
 
+    /// The invoice drafted for this job, if any (one per job; re-drafting updates it).
+    var latestInvoice: Invoice? { invoices.max { $0.updatedAt < $1.updatedAt } }
+
     var needsClientChoice: Bool { client == nil && !clientNameHint.isEmpty }
 
     var isProcessing: Bool { recordings.contains { $0.state == .transcribing || $0.state == .extracting } }
@@ -150,6 +153,9 @@ final class Invoice {
     var gmailDraftID: String = ""
     var createdAt: Date = Date()
     var totalCents: Int = 0
+    /// What the drafted invoice contained, to tell when the job has changed since.
+    var fingerprint: String = ""
+    var updatedAt: Date = Date()
 
     init(number: Int, sentTo: String, gmailDraftID: String, totalCents: Int) {
         self.number = number
