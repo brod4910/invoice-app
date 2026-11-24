@@ -5,7 +5,8 @@ import InvoiceCore
 /// Uses Apple's free on-device model when the phone supports it. Otherwise, if the optional
 /// Claude server in /proxy is configured, uses that.
 enum ExtractionClient {
-    static func extract(_ request: ExtractionRequest) async throws -> ExtractionResult {
+    /// `existing` is the job's current items, in the same order as the numbered list in `request`.
+    static func extract(_ request: ExtractionRequest, existing: [ExistingItem] = []) async throws -> ExtractionResult {
         let raw: ExtractionResult
         if OnDeviceExtractor.isAvailable {
             raw = try await OnDeviceExtractor.extract(request)
@@ -15,10 +16,9 @@ enum ExtractionClient {
             throw ExtractionError.unavailable(OnDeviceExtractor.unavailableReason ?? "Apple's on-device AI isn't available.")
         }
         // Drop anything the model made up: items, prices and names must come from what was said.
-        let grounded = ExtractionGrounding.combineSharedPrice(
-            ExtractionGrounding.ground(raw, transcript: request.transcript),
-            transcript: request.transcript
-        )
+        var grounded = ExtractionGrounding.ground(raw, transcript: request.transcript)
+        grounded = ExtractionGrounding.groundChanges(grounded, transcript: request.transcript, existing: existing)
+        grounded = ExtractionGrounding.combineSharedPrice(grounded, transcript: request.transcript)
         // Fields Dad labels out loud ("Client …", "Address …") always win.
         return SpokenFields.parse(request.transcript).apply(to: grounded)
     }

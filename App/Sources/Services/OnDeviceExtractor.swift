@@ -43,7 +43,7 @@ enum OnDeviceExtractor {
         let clients = request.knownClients.suffix(50)
         if !clients.isEmpty { parts.append("Known clients:\n" + clients.joined(separator: "\n")) }
         if !request.existingItems.isEmpty {
-            parts.append("Items already on this job (do not repeat):\n" + request.existingItems.joined(separator: "\n"))
+            parts.append("Items already on this job, numbered:\n" + request.existingItems.joined(separator: "\n"))
         }
         parts.append("Transcript:\n" + request.transcript)
         return parts.joined(separator: "\n\n")
@@ -64,6 +64,11 @@ enum OnDeviceExtractor {
     - Write spoken email addresses with @ and dots.
     - If the client's name matches a known client, use that spelling.
     - Do not repeat items already on the job.
+
+    Corrections:
+    - If the speaker corrects an item already on the job, for example "instead of", "I meant", "change", "make that", or "actually", add a change with that item's number. Do not add a new charge for it.
+    - In a change, fill in only what the speaker corrected. For new wording, write the whole item again with only the corrected words swapped.
+    - Set remove only if the speaker says to take the item off.
     """
 }
 
@@ -81,6 +86,8 @@ struct JobNotes {
     var jobTitle: String?
     @Guide(description: "One entry per price said, holding all the work that price pays for. Empty if no work is described.")
     var charges: [JobNotesCharge]
+    @Guide(description: "Corrections to items already on the job, by item number. Empty if nothing is corrected.")
+    var changes: [JobNotesChange]
     @Guide(description: "Anything unclear the reviewer should check")
     var notes: String?
 
@@ -99,7 +106,16 @@ struct JobNotes {
                     details: $0.details.nonEmpty
                 )
             },
-            notes: notes.nonEmpty
+            notes: notes.nonEmpty,
+            changes: changes.map {
+                ItemChange(
+                    itemNumber: $0.itemNumber,
+                    newDescription: $0.newDescription.nonEmpty,
+                    newQuantity: $0.newQuantity.flatMap { $0 > 0 ? $0 : nil },
+                    newUnitPriceCents: $0.newPriceDollars.map { Int(($0 * 100).rounded()) },
+                    remove: $0.remove
+                )
+            }
         )
     }
 }
@@ -114,6 +130,20 @@ struct JobNotesCharge {
     var priceDollars: Double?
     @Guide(description: "Materials, sizes or other specifics")
     var details: String?
+}
+
+@Generable
+struct JobNotesChange {
+    @Guide(description: "The number of the item already on the job that the speaker is correcting")
+    var itemNumber: Int
+    @Guide(description: "The whole item reworded with the correction made. Empty if the wording is not corrected.")
+    var newDescription: String?
+    @Guide(description: "The corrected price in US dollars. Empty if the price is not corrected.")
+    var newPriceDollars: Double?
+    @Guide(description: "The corrected count or hours. Empty if not corrected.")
+    var newQuantity: Double?
+    @Guide(description: "True only if the speaker says to take this item off")
+    var remove: Bool
 }
 
 private extension Optional where Wrapped == String {

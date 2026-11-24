@@ -9,6 +9,8 @@ public struct ExtractionResult: Codable, Equatable, Sendable {
     public var jobTitle: String?
     public var items: [ExtractedItem]
     public var notes: String?
+    /// Spoken corrections to items already on the job ("instead of kitchen I meant living room").
+    public var changes: [ItemChange]
 
     public init(
         clientName: String? = nil,
@@ -17,7 +19,8 @@ public struct ExtractionResult: Codable, Equatable, Sendable {
         jobAddress: String? = nil,
         jobTitle: String? = nil,
         items: [ExtractedItem] = [],
-        notes: String? = nil
+        notes: String? = nil,
+        changes: [ItemChange] = []
     ) {
         self.clientName = clientName
         self.clientEmail = clientEmail
@@ -26,6 +29,20 @@ public struct ExtractionResult: Codable, Equatable, Sendable {
         self.jobTitle = jobTitle
         self.items = items
         self.notes = notes
+        self.changes = changes
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        clientName = try c.decodeIfPresent(String.self, forKey: .clientName)
+        clientEmail = try c.decodeIfPresent(String.self, forKey: .clientEmail)
+        clientPhone = try c.decodeIfPresent(String.self, forKey: .clientPhone)
+        jobAddress = try c.decodeIfPresent(String.self, forKey: .jobAddress)
+        jobTitle = try c.decodeIfPresent(String.self, forKey: .jobTitle)
+        items = try c.decodeIfPresent([ExtractedItem].self, forKey: .items) ?? []
+        notes = try c.decodeIfPresent(String.self, forKey: .notes)
+        // Older servers don't send changes.
+        changes = try c.decodeIfPresent([ItemChange].self, forKey: .changes) ?? []
     }
 
     enum CodingKeys: String, CodingKey {
@@ -36,6 +53,60 @@ public struct ExtractionResult: Codable, Equatable, Sendable {
         case jobTitle = "job_title"
         case items
         case notes
+        case changes
+    }
+}
+
+/// A correction to one item already on the job, by its 1-based number in the list the AI was shown.
+public struct ItemChange: Codable, Equatable, Sendable {
+    public var itemNumber: Int
+    public var newDescription: String?
+    public var newQuantity: Double?
+    public var newUnitPriceCents: Int?
+    public var remove: Bool
+
+    public init(itemNumber: Int, newDescription: String? = nil, newQuantity: Double? = nil,
+                newUnitPriceCents: Int? = nil, remove: Bool = false) {
+        self.itemNumber = itemNumber
+        self.newDescription = newDescription
+        self.newQuantity = newQuantity
+        self.newUnitPriceCents = newUnitPriceCents
+        self.remove = remove
+    }
+
+    public var isEmpty: Bool {
+        newDescription == nil && newQuantity == nil && newUnitPriceCents == nil && !remove
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case itemNumber = "item_number"
+        case newDescription = "new_description"
+        case newQuantity = "new_quantity"
+        case newUnitPriceCents = "new_unit_price_cents"
+        case remove
+    }
+}
+
+/// An item already on the job, as shown to the AI so it can be corrected by number.
+public struct ExistingItem: Equatable, Sendable {
+    public var description: String
+    public var unitPriceCents: Int?
+    public var quantity: Double
+
+    public init(description: String, unitPriceCents: Int?, quantity: Double = 1) {
+        self.description = description
+        self.unitPriceCents = unitPriceCents
+        self.quantity = quantity
+    }
+
+    /// Numbered lines for the prompt: "1. Paint kitchen and clean floor ($450.00)".
+    public static func numberedList(_ items: [ExistingItem]) -> [String] {
+        items.enumerated().map { index, item in
+            var line = "\(index + 1). \(item.description)"
+            if item.quantity != 1 { line += " x \(String(format: "%g", item.quantity))" }
+            if let cents = item.unitPriceCents { line += " (\(Money.format(cents: cents)))" } else { line += " (no price)" }
+            return line
+        }
     }
 }
 

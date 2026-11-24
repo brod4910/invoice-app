@@ -35,6 +35,56 @@ public enum ExtractionGrounding {
         return out
     }
 
+    static let removeCues = [
+        "remove", "take off", "take it off", "take that off", "delete", "drop", "scratch",
+        "cancel", "didn't do", "did not do", "never did", "forget about", "get rid of",
+    ]
+
+    /// Keeps only corrections the transcript backs up: a real item number, a new price that was
+    /// said, new wording that brings in at least one word that was said and wasn't there before,
+    /// and removal only when removal words were said. Also drops new items that just repeat a
+    /// corrected item, so "I meant living room" doesn't add a second line.
+    public static func groundChanges(_ result: ExtractionResult, transcript: String, existing: [ExistingItem]) -> ExtractionResult {
+        let words = Set(tokens(transcript))
+        let numbers = spokenNumbers(transcript)
+        let said = " " + tokensAllLengths(transcript).joined(separator: " ") + " "
+        let removalSaid = removeCues.contains { said.contains(" " + tokensAllLengths($0).joined(separator: " ") + " ") }
+
+        var seen = Set<Int>()
+        var changes: [ItemChange] = []
+        for raw in result.changes {
+            guard existing.indices.contains(raw.itemNumber - 1), !seen.contains(raw.itemNumber) else { continue }
+            let old = existing[raw.itemNumber - 1]
+            var change = raw
+            if let cents = change.newUnitPriceCents, cents == old.unitPriceCents || !numbers.contains(Decimal(cents) / 100) {
+                change.newUnitPriceCents = nil
+            }
+            if let qty = change.newQuantity, qty == old.quantity || !numbers.contains(Decimal(qty)) {
+                change.newQuantity = nil
+            }
+            if let text = change.newDescription?.trimmingCharacters(in: .whitespacesAndNewlines) {
+                let oldWords = Set(tokens(old.description))
+                let added = tokens(text).filter { !oldWords.contains($0) }
+                change.newDescription = (!text.isEmpty && added.contains { isSaid($0, in: words) }) ? text : nil
+            }
+            if change.remove && !removalSaid { change.remove = false }
+            guard !change.isEmpty else { continue }
+            seen.insert(raw.itemNumber)
+            changes.append(change)
+        }
+
+        var out = result
+        out.changes = changes
+        let correctedWords = changes.compactMap(\.newDescription).map { Set(tokens($0)) }
+        if !correctedWords.isEmpty {
+            out.items = result.items.filter { item in
+                let itemWords = Set(tokens(item.description))
+                return !correctedWords.contains { itemWords.isSubset(of: $0) }
+            }
+        }
+        return out
+    }
+
     /// Words that mean one price covers all the work said, e.g. "$450 for the whole job".
     static let wholeJobCues = [
         "whole job", "whole thing", "for everything", "for all of it", "for all that", "for both",

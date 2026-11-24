@@ -16,6 +16,15 @@ export const ExtractionSchema = z.object({
     }),
   ),
   notes: z.string().nullable(),
+  changes: z.array(
+    z.object({
+      item_number: z.number().int(),
+      new_description: z.string().nullable(),
+      new_quantity: z.number().nullable(),
+      new_unit_price_cents: z.number().int().nullable(),
+      remove: z.boolean(),
+    }),
+  ),
 });
 
 export type Extraction = z.infer<typeof ExtractionSchema>;

@@ -405,4 +405,44 @@ final class AccountingExportTests: XCTestCase {
         XCTAssertEqual(ExtractionGrounding.joinWork(["Paint kitchen", "Clean floor", "Haul trash"]),
                        "Paint kitchen, clean floor and haul trash")
     }
+
+    // MARK: Spoken corrections
+
+    private let paintJob = [ExistingItem(description: "Paint kitchen and clean floor", unitPriceCents: 45_000)]
+
+    func testCorrectionChangesRoomAndDropsDuplicateItem() {
+        let raw = ExtractionResult(
+            items: [ExtractedItem(description: "Paint living room")],
+            changes: [ItemChange(itemNumber: 1, newDescription: "Paint living room and clean floor")]
+        )
+        let out = ExtractionGrounding.groundChanges(raw, transcript: "instead of kitchen i meant living room", existing: paintJob)
+        XCTAssertEqual(out.changes, [ItemChange(itemNumber: 1, newDescription: "Paint living room and clean floor")])
+        XCTAssertTrue(out.items.isEmpty)
+    }
+
+    func testCorrectionPriceMustBeSaid() {
+        let raw = ExtractionResult(changes: [ItemChange(itemNumber: 1, newUnitPriceCents: 35_000)])
+        XCTAssertEqual(ExtractionGrounding.groundChanges(raw, transcript: "actually make that 350", existing: paintJob).changes.first?.newUnitPriceCents, 35_000)
+        XCTAssertTrue(ExtractionGrounding.groundChanges(raw, transcript: "actually make it cheaper", existing: paintJob).changes.isEmpty)
+    }
+
+    func testCorrectionNeedsRealItemAndRemovalWords() {
+        let badNumber = ExtractionResult(changes: [ItemChange(itemNumber: 4, newUnitPriceCents: 35_000)])
+        XCTAssertTrue(ExtractionGrounding.groundChanges(badNumber, transcript: "make it 350", existing: paintJob).changes.isEmpty)
+
+        let remove = ExtractionResult(changes: [ItemChange(itemNumber: 1, remove: true)])
+        XCTAssertTrue(ExtractionGrounding.groundChanges(remove, transcript: "also fixed a door", existing: paintJob).changes.isEmpty)
+        XCTAssertEqual(ExtractionGrounding.groundChanges(remove, transcript: "take that off, I didn't do it", existing: paintJob).changes.count, 1)
+    }
+
+    func testOldServerReplyWithoutChangesStillDecodes() throws {
+        let json = #"{"client_name":null,"client_email":null,"client_phone":null,"job_address":null,"job_title":null,"items":[],"notes":null}"#
+        let result = try JSONDecoder().decode(ExtractionResult.self, from: Data(json.utf8))
+        XCTAssertEqual(result.changes, [])
+    }
+
+    func testNumberedExistingItems() {
+        XCTAssertEqual(ExistingItem.numberedList(paintJob + [ExistingItem(description: "Haul trash", unitPriceCents: nil)]),
+                       ["1. Paint kitchen and clean floor ($450.00)", "2. Haul trash (no price)"])
+    }
 }

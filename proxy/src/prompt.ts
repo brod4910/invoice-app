@@ -13,7 +13,8 @@ Rules:
 - If a correction is spoken ("no wait, it was three hours"), use the corrected value.
 - Write spoken email addresses in normal form ("mary at gmail dot com" is mary@gmail.com). Use null for anything not mentioned.
 - If the client's name sounds like one of the known clients, use the known spelling exactly.
-- Existing items are already on this job. Do not repeat them; return only new items. If the speaker changes an existing item (a new price, say), describe the change in notes instead.
+- Existing items are already on this job, numbered, with their prices. Do not repeat them; return only new items.
+- If the speaker corrects an existing item ("instead of kitchen I meant living room", "make that 350", "take the gutters off"), add an entry to changes with its item_number and only the corrected fields: new_description is the whole item reworded with the correction made, new_unit_price_cents and new_quantity are the corrected values, and remove is true only if they say to take it off. Leave the others null or false. Do not also add it to items. Use an empty changes array when nothing is corrected.
 - Put anything else useful for the invoice reviewer (unclear words, a possible wrong number) in notes. Use null if there is nothing.`;
 
 export function buildUserMessage(req: ExtractionRequest): string {

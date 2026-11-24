@@ -95,12 +95,18 @@ final class JobProcessor {
             recording.state = .extracting
             try? context.save()
             guard let job = recording.job else { return }
+            // Number the current items so a spoken correction ("I meant living room") can point at one.
+            let current = job.sortedItems
+            let existing = current.map {
+                ExistingItem(description: $0.itemDescription, unitPriceCents: $0.unitPriceCents, quantity: $0.quantity)
+            }
             let request = ExtractionRequest(
                 transcript: recording.transcript,
-                existingItems: job.sortedItems.map(\.itemDescription),
+                existingItems: ExistingItem.numberedList(existing),
                 knownClients: knownClientNames()
             )
-            let result = try await ExtractionClient.extract(request)
+            let result = try await ExtractionClient.extract(request, existing: existing)
+            applyChanges(result.changes, to: current)
             apply(result, to: job, from: recording)
             recording.state = .done
             recording.lastError = ""
@@ -109,6 +115,20 @@ final class JobProcessor {
             recording.lastError = error.localizedDescription
         }
         try? context.save()
+    }
+
+    /// Edits items in place for spoken corrections. `items` is the list the numbers refer to.
+    private func applyChanges(_ changes: [ItemChange], to items: [LineItem]) {
+        for change in changes where items.indices.contains(change.itemNumber - 1) {
+            let item = items[change.itemNumber - 1]
+            if change.remove {
+                context.delete(item)
+                continue
+            }
+            if let text = change.newDescription { item.itemDescription = text }
+            if let cents = change.newUnitPriceCents { item.unitPriceCents = cents }
+            if let quantity = change.newQuantity { item.quantity = quantity }
+        }
     }
 
     private func apply(_ result: ExtractionResult, to job: Job, from recording: Recording) {

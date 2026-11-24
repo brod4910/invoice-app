@@ -13,6 +13,7 @@ const sample = {
   job_title: "Fence repair",
   items: [{ description: "Replace fence boards", quantity: 12, unit_price_cents: 1500, details: "Cedar" }],
   notes: null,
+  changes: [],
 };
 
 const fakeExtract: Extractor = async () => sample;
@@ -76,6 +77,15 @@ describe("schema and prompt", () => {
       items: [{ description: "Haul debris", quantity: 1, unit_price_cents: null, details: null }],
     });
     expect(parsed.items[0].unit_price_cents).toBeNull();
+  });
+
+  it("accepts a spoken correction to an existing item", () => {
+    const parsed = ExtractionSchema.parse({
+      ...sample,
+      items: [],
+      changes: [{ item_number: 1, new_description: "Paint living room and clean floor", new_quantity: null, new_unit_price_cents: null, remove: false }],
+    });
+    expect(parsed.changes[0].item_number).toBe(1);
   });
 
   it("includes known clients and existing items only when present", () => {
