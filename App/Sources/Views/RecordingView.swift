@@ -6,6 +6,8 @@ import SwiftUI
 struct RecordingView: View {
     /// nil starts a new job; otherwise clips are added to this job.
     let existingJob: Job?
+    /// Set when saying a recording again: the first clip replaces this one.
+    var replacing: Recording? = nil
     /// Called with the job the clips went into (nil if nothing was recorded).
     let onFinish: (Job?) -> Void
 
@@ -14,6 +16,7 @@ struct RecordingView: View {
     @State private var job: Job?
     @State private var phase: Phase = .recording
     @State private var errorMessage: String?
+    @State private var replaced = false
 
     enum Phase { case recording, saved }
 
@@ -35,8 +38,9 @@ struct RecordingView: View {
         VStack(spacing: 32) {
             Text(recorder.state == .paused ? "Paused" : "Listening…")
                 .font(.largeTitle.bold())
-            Text(existingJob == nil && job == nil ? "Say who the job was for, what you did, and what each part costs."
-                                                  : "Add anything you forgot.")
+            Text(replacing != nil && !replaced ? "Say it all again the right way. This takes the place of the old recording."
+                 : existingJob == nil && job == nil ? "Say who the job was for, what you did, and what each part costs."
+                 : "Add anything you forgot.")
                 .font(.title3)
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
@@ -123,7 +127,10 @@ struct RecordingView: View {
             if job == nil { onFinish(nil) } else { phase = .saved }
             return
         }
-        if let job {
+        if let replacing, !replaced {
+            processor.replace(replacing, fileName: clip.fileName, duration: clip.duration)
+            replaced = true
+        } else if let job {
             processor.add(fileName: clip.fileName, duration: clip.duration, to: job)
         } else {
             job = processor.startNewJob(fileName: clip.fileName, duration: clip.duration)

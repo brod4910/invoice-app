@@ -12,6 +12,7 @@ struct JobDetailView: View {
     @State private var showRecorder = false
     @State private var editingItem: LineItem?
     @State private var deletingItem: LineItem?
+    @State private var sayingAgain: Recording?
     @State private var editingClient = false
     @State private var pickingClient = false
     @State private var showMerge = false
@@ -160,9 +161,12 @@ struct JobDetailView: View {
 
             Section("What you said") {
                 ForEach(job.sortedRecordings) { recording in
-                    RecordingRow(recording: recording) {
-                        Task { await processor.process(recording) }
-                    }
+                    RecordingRow(
+                        recording: recording,
+                        onRetry: { Task { await processor.process(recording) } },
+                        onRedo: { Task { await processor.redo(recording) } },
+                        onSayAgain: { sayingAgain = recording }
+                    )
                 }
             }
         }
@@ -183,6 +187,9 @@ struct JobDetailView: View {
         .navigationDestination(isPresented: $showInvoice) { InvoicePreviewView(job: job) }
         .fullScreenCover(isPresented: $showRecorder) {
             RecordingView(existingJob: job) { _ in showRecorder = false }
+        }
+        .fullScreenCover(item: $sayingAgain) { recording in
+            RecordingView(existingJob: job, replacing: recording) { _ in sayingAgain = nil }
         }
         .sheet(item: $deletingItem) { item in
             DeleteConfirmView.forItem(item) {
@@ -256,10 +263,13 @@ struct LineItemRow: View {
 struct RecordingRow: View {
     let recording: Recording
     let onRetry: () -> Void
+    /// Words were changed: rewrite this recording's items from them.
+    let onRedo: () -> Void
+    let onSayAgain: () -> Void
     @State private var typing = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(recording.recordedAt, format: .dateTime.hour().minute())
                 Text("· \(Int(recording.duration.rounded())) sec").foregroundStyle(.secondary)
@@ -282,15 +292,29 @@ struct RecordingRow: View {
             if recording.state == .failed, !recording.lastError.isEmpty {
                 Text(recording.lastError).font(.footnote).foregroundStyle(.orange)
             }
+            if recording.state == .done {
+                HStack(spacing: 12) {
+                    Button { typing = true } label: {
+                        Label("Fix the words", systemImage: "pencil")
+                    }
+                    Button(action: onSayAgain) {
+                        Label("Say it again", systemImage: "mic")
+                    }
+                }
+                .font(.body.bold())
+                // Two buttons in one list row: borderless keeps each tap to its own button.
+                .buttonStyle(.borderless)
+                .padding(.top, 2)
+            }
         }
         .sheet(isPresented: $typing) {
-            TranscriptEditor(recording: recording, onSave: onRetry)
+            TranscriptEditor(recording: recording, onSave: onRedo)
         }
     }
 }
 
-/// When speech-to-text can't run (e.g. in the Simulator), type what was said instead.
-/// Saving a transcript skips transcription and goes straight to pulling out the items.
+/// Type what was said (when speech-to-text couldn't run) or fix the words it heard.
+/// Saving rewrites this recording's items from the words.
 struct TranscriptEditor: View {
     let recording: Recording
     let onSave: () -> Void
@@ -299,9 +323,17 @@ struct TranscriptEditor: View {
 
     var body: some View {
         NavigationStack {
-            TextEditor(text: $text)
-                .font(.title3)
+            VStack(alignment: .leading, spacing: 12) {
+                TextEditor(text: $text)
+                    .font(.title3)
+                if !recording.transcript.isEmpty {
+                    Text("When you save, the items from this recording are written up again from these words.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+            }
                 .padding()
+                .onAppear { text = recording.transcript }
                 .navigationTitle("What was said")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

@@ -43,6 +43,38 @@ final class JobProcessor {
         }
     }
 
+    /// After the words of a recording are corrected: throw away the items that recording made
+    /// and write them up again from the new words.
+    func redo(_ recording: Recording) async {
+        removeItems(madeBy: recording)
+        recording.state = .recorded
+        recording.lastError = ""
+        try? context.save()
+        await process(recording)
+    }
+
+    /// Dad said it again: the new clip takes the old one's place, along with the items it made.
+    func replace(_ recording: Recording, fileName: String, duration: TimeInterval) {
+        removeItems(madeBy: recording)
+        try? FileManager.default.removeItem(at: recording.fileURL)
+        recording.fileName = fileName
+        recording.duration = duration
+        recording.recordedAt = Date()
+        recording.transcript = ""
+        recording.state = .recorded
+        recording.lastError = ""
+        if let job = recording.job, job.status == .invoiced { job.status = .draft }
+        try? context.save()
+        Task { await process(recording) }
+    }
+
+    private func removeItems(madeBy recording: Recording) {
+        guard let job = recording.job else { return }
+        for item in job.items where item.sourceRecordingID == recording.id {
+            context.delete(item)
+        }
+    }
+
     func process(_ recording: Recording) async {
         guard !running.contains(recording.id) else { return }
         running.insert(recording.id)
