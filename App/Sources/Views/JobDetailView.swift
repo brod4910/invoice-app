@@ -194,8 +194,9 @@ struct JobDetailView: View {
         .fullScreenCover(isPresented: $showRecorder) {
             RecordingView(existingJob: job) { _ in showRecorder = false }
         }
-        .fullScreenCover(item: $sayingAgain) { recording in
-            RecordingView(existingJob: job, replacing: recording) { _ in sayingAgain = nil }
+        .fullScreenCover(item: $sayingAgain) { _ in
+            // A new recording on the same job: what he says fixes or adds to the items already here.
+            RecordingView(existingJob: job) { _ in sayingAgain = nil }
         }
         .sheet(item: $deletingItem) { item in
             DeleteConfirmView.forItem(item) {
@@ -304,7 +305,7 @@ struct RecordingRow: View {
                         Label("Fix the words", systemImage: "pencil")
                     }
                     Button(action: onSayAgain) {
-                        Label("Say it again", systemImage: "mic")
+                        Label("Fix by talking", systemImage: "mic")
                     }
                 }
                 .font(.body.bold())

@@ -479,4 +479,23 @@ final class AccountingExportTests: XCTestCase {
         XCTAssertEqual(ContactEmailMatching.addressSearchTerm("123 Oak Street, Apt 4"), "123 Oak")
         XCTAssertNil(ContactEmailMatching.addressSearchTerm("Oak Street"))
     }
+
+    // MARK: Transcript cleanup
+
+    func testFillerAndStuttersRemoved() {
+        XCTAssertEqual(TranscriptCleaner.clean("Um, client uh Mary Johnson, I I painted the the kitchen, umm 450 dollars."),
+                       "Client Mary Johnson, I painted the kitchen, 450 dollars.")
+        XCTAssertEqual(TranscriptCleaner.clean("Hmm the floor erm was uhh 200"), "The floor was 200")
+    }
+
+    func testRepeatedNumbersAndRealWordsKept() {
+        XCTAssertEqual(TranscriptCleaner.clean("two 2 by 4s, 40 40 dollars"), "two 2 by 4s, 40 40 dollars")
+        XCTAssertEqual(TranscriptCleaner.clean("Huh, the hum of the umbrella shop"), "Huh, the hum of the umbrella shop")
+    }
+
+    func testServerItemsKeptEvenWhenReworded() {
+        let raw = ExtractionResult(items: [ExtractedItem(description: "Drywall repair", unitPriceCents: 20_000)])
+        XCTAssertEqual(ExtractionGrounding.ground(raw, transcript: "fixed the hole in the wall 200", checkItemWords: false).items.count, 1)
+        XCTAssertEqual(ExtractionGrounding.ground(raw, transcript: "fixed the hole in the wall 200").items.count, 0)
+    }
 }

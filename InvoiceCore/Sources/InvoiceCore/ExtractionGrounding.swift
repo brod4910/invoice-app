@@ -4,14 +4,17 @@ import Foundation
 /// Small on-device models sometimes invent plausible items and prices; this keeps only
 /// items whose words were actually said, and only prices whose number was actually said.
 public enum ExtractionGrounding {
-    public static func ground(_ result: ExtractionResult, transcript: String) -> ExtractionResult {
+    /// `checkItemWords` drops items none of whose words were said. That catches the small
+    /// on-device model inventing work, but a stronger model that rewords what was said
+    /// ("fixed the wall" -> "Drywall repair") would lose real work, so it's off for the server.
+    public static func ground(_ result: ExtractionResult, transcript: String, checkItemWords: Bool = true) -> ExtractionResult {
         let words = Set(tokens(transcript))
         let numbers = spokenNumbers(transcript)
         var out = result
 
         out.items = result.items.compactMap { item in
             let itemWords = tokens(item.description + " " + (item.details ?? ""))
-            guard itemWords.contains(where: { isSaid($0, in: words) }) else { return nil }
+            if checkItemWords, !itemWords.contains(where: { isSaid($0, in: words) }) { return nil }
             var kept = item
             if let cents = item.unitPriceCents, !numbers.contains(Decimal(cents) / 100) {
                 kept.unitPriceCents = nil

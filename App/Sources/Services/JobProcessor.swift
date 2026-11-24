@@ -98,39 +98,16 @@ final class JobProcessor {
         }
     }
 
-    /// After the words of a recording are corrected: throw away the items that recording made
-    /// and write them up again from the new words.
+    /// After the words of a recording are corrected: write its items up again from the new words.
+    /// The old items stay until the new write-up succeeds, so a failure never loses anything.
     func redo(_ recording: Recording) async {
-        removeItems(madeBy: recording)
         recording.state = .recorded
         recording.lastError = ""
         try? context.save()
-        await process(recording)
+        await process(recording, rewritingItems: true)
     }
 
-    /// Dad said it again: the new clip takes the old one's place, along with the items it made.
-    func replace(_ recording: Recording, fileName: String, duration: TimeInterval) {
-        removeItems(madeBy: recording)
-        try? FileManager.default.removeItem(at: recording.fileURL)
-        recording.fileName = fileName
-        recording.duration = duration
-        recording.recordedAt = Date()
-        recording.transcript = ""
-        recording.state = .recorded
-        recording.lastError = ""
-        if let job = recording.job, job.status == .invoiced { job.status = .draft }
-        try? context.save()
-        Task { await process(recording) }
-    }
-
-    private func removeItems(madeBy recording: Recording) {
-        guard let job = recording.job else { return }
-        for item in job.items where item.sourceRecordingID == recording.id {
-            context.delete(item)
-        }
-    }
-
-    func process(_ recording: Recording) async {
+    func process(_ recording: Recording, rewritingItems: Bool = false) async {
         guard !running.contains(recording.id) else { return }
         running.insert(recording.id)
         defer { running.remove(recording.id) }
@@ -139,7 +116,8 @@ final class JobProcessor {
             if recording.transcript.isEmpty {
                 recording.state = .transcribing
                 try? context.save()
-                recording.transcript = try await Transcriber.transcribe(fileURL: recording.fileURL)
+                // Keep what was heard, minus "um"/"uh" and stutters; the audio file is kept too.
+                recording.transcript = TranscriptCleaner.clean(try await Transcriber.transcribe(fileURL: recording.fileURL))
             }
             guard !recording.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 // No words were heard: drop the recording. A job left with nothing in it is
@@ -151,8 +129,10 @@ final class JobProcessor {
             recording.state = .extracting
             try? context.save()
             guard let job = recording.job else { return }
+            // Items this recording made before; replaced only once the new write-up has succeeded.
+            let previous = rewritingItems ? job.items.filter { $0.sourceRecordingID == recording.id } : []
             // Number the current items so a spoken correction ("I meant living room") can point at one.
-            let current = job.sortedItems
+            let current = job.sortedItems.filter { item in !previous.contains { $0.id == item.id } }
             let existing = current.map {
                 ExistingItem(description: $0.itemDescription, unitPriceCents: $0.unitPriceCents, quantity: $0.quantity)
             }
@@ -162,6 +142,7 @@ final class JobProcessor {
                 knownClients: knownClientNames()
             )
             let result = try await ExtractionClient.extract(request, existing: existing)
+            for item in previous { context.delete(item) }
             applyChanges(result.changes, to: current)
             apply(result, to: job, from: recording)
             recording.state = .done
