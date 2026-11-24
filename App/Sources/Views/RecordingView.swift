@@ -94,7 +94,7 @@ struct RecordingView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Spacer()
-            Button { onFinish(job) } label: {
+            Button { onFinish(job.flatMap { $0.isGone ? nil : $0 }) } label: {
                 Text("Done").font(.largeTitle.bold()).frame(maxWidth: .infinity, minHeight: 96)
             }
             .buttonStyle(.borderedProminent)
@@ -128,7 +128,7 @@ struct RecordingView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.red)
-            Button { onFinish(job) } label: {
+            Button { onFinish(job.flatMap { $0.isGone ? nil : $0 }) } label: {
                 Text("Close").font(.title2.bold()).frame(maxWidth: .infinity, minHeight: 64)
             }
             .buttonStyle(.bordered)
@@ -154,6 +154,8 @@ struct RecordingView: View {
             if job == nil { onFinish(nil) } else { phase = .saved }
             return
         }
+        // The job may have been removed meanwhile (its first clip turned out to be silence).
+        if let current = job, current.isGone { job = nil }
         // Silence (a pocket, a quiet room, the mic covered): don't make a recording or a job.
         guard clip.heardSound else {
             try? FileManager.default.removeItem(at: AudioStorage.directory.appendingPathComponent(clip.fileName))

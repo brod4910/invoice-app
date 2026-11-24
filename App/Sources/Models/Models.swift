@@ -85,6 +85,12 @@ final class Job {
     var needsClientChoice: Bool { client == nil && !clientNameHint.isEmpty }
 
     var isProcessing: Bool { recordings.contains { $0.state == .transcribing || $0.state == .extracting } }
+
+    /// True when only silence was recorded: nothing heard, nothing typed, nothing invoiced.
+    var isEmpty: Bool { recordings.isEmpty && items.isEmpty && invoices.isEmpty }
+
+    /// True once the job has been deleted, so screens holding on to it can let go.
+    var isGone: Bool { isDeleted || modelContext == nil }
 }
 
 enum RecordingState: String, Codable {

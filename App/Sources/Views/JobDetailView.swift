@@ -180,6 +180,12 @@ struct JobDetailView: View {
                 Image(systemName: "ellipsis.circle").accessibilityLabel("More")
             }
         }
+        .onAppear { processor.jobScreenOpened(job) }
+        .onDisappear { processor.jobScreenClosed(job) }
+        // Only silence was recorded and the recording was dropped: nothing to show, so go back.
+        .onChange(of: job.isEmpty) { _, empty in
+            if empty && !showRecorder && sayingAgain == nil { dismiss() }
+        }
         .sheet(item: $editingItem) { LineItemEditor(item: $0) }
         .sheet(isPresented: $editingClient) { ClientEditor(job: job) }
         .sheet(isPresented: $pickingClient) { ClientPickerView(job: job) }

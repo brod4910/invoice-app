@@ -10,6 +10,8 @@ import SwiftData
 final class JobProcessor {
     private let context: ModelContext
     private var running = Set<UUID>()
+    /// Jobs whose screen is open right now; deleting one of those under the screen could crash.
+    private var openJobs = Set<UUID>()
 
     init(context: ModelContext) {
         self.context = context
@@ -35,16 +37,32 @@ final class JobProcessor {
     }
 
     private func discard(_ recording: Recording) {
+        let job = recording.job
         try? FileManager.default.removeItem(at: recording.fileURL)
         context.delete(recording)
         try? context.save()
+        // Remove the job too if that was all it had. If its screen is open, the screen closes
+        // itself and the job is removed as it closes (see jobScreenClosed).
+        if let job, job.isEmpty, !openJobs.contains(job.id) {
+            context.delete(job)
+            try? context.save()
+        }
     }
 
-    /// Removes jobs that ended up with no recordings and no items (only silence was recorded).
-    /// Runs at launch, when no job screen is open.
+    func jobScreenOpened(_ job: Job) { openJobs.insert(job.id) }
+
+    func jobScreenClosed(_ job: Job) {
+        openJobs.remove(job.id)
+        guard !job.isGone, job.isEmpty, !job.isProcessing else { return }
+        context.delete(job)
+        try? context.save()
+    }
+
+    /// Removes jobs that ended up empty (only silence was recorded), e.g. if the app was
+    /// closed mid-way. Runs at launch, when no job screen is open.
     func removeEmptyJobs() {
         let jobs = (try? context.fetch(FetchDescriptor<Job>())) ?? []
-        for job in jobs where job.recordings.isEmpty && job.items.isEmpty && job.invoices.isEmpty {
+        for job in jobs where job.isEmpty {
             context.delete(job)
         }
         try? context.save()

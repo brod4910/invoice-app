@@ -70,7 +70,7 @@ struct HomeView: View {
             .fullScreenCover(isPresented: $showRecorder) {
                 RecordingView(existingJob: nil) { job in
                     showRecorder = false
-                    if let job { path = [job] }
+                    if let job, !job.isGone { path = [job] }
                 }
             }
         }
