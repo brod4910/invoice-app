@@ -32,7 +32,7 @@ enum OnDeviceExtractor {
         let response = try await session.respond(
             to: prompt(for: request),
             generating: JobNotes.self,
-            options: GenerationOptions(sampling: .greedy)
+            options: GenerationOptions(samplingMode: .greedy)
         )
         return response.content.asResult()
     }
