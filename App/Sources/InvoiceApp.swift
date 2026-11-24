@@ -21,6 +21,7 @@ struct InvoiceApp: App {
                 .dynamicTypeSize(.large ... .accessibility3)
                 .task {
                     await gmail.restore()
+                    processor.removeEmptyJobs()
                     await processor.retryPending()
                 }
         }

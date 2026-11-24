@@ -11,6 +11,10 @@ final class AudioRecorder {
     private(set) var elapsed: TimeInterval = 0
     private(set) var level: Float = 0
     private(set) var currentFileName: String?
+    /// Loudest moment of this clip in dB (-160 is silence, 0 is max).
+    private var loudestPower: Float = -160
+    /// Talking near the phone peaks well above this; a quiet room or a pocket stays below it.
+    static let speechPeakThreshold: Float = -40
 
     private var recorder: AVAudioRecorder?
     private var timer: Timer?
@@ -30,6 +34,7 @@ final class AudioRecorder {
         recorder = box.recorder
         currentFileName = fileName
         elapsed = 0
+        loudestPower = -160
         state = .recording
         startTimer()
     }
@@ -66,8 +71,9 @@ final class AudioRecorder {
         state = .recording
     }
 
-    /// Stops and returns the finished file name and duration.
-    func stop() -> (fileName: String, duration: TimeInterval)? {
+    /// Stops and returns the finished file name, duration, and whether anything loud enough
+    /// to be speech was heard.
+    func stop() -> (fileName: String, duration: TimeInterval, heardSound: Bool)? {
         guard let recorder, let fileName = currentFileName else { return nil }
         let duration = recorder.currentTime > 0 ? recorder.currentTime : elapsed
         recorder.stop()
@@ -81,7 +87,7 @@ final class AudioRecorder {
         Task.detached {
             try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         }
-        return (fileName, duration)
+        return (fileName, duration, loudestPower >= Self.speechPeakThreshold)
     }
 
     private func startTimer() {
@@ -93,6 +99,7 @@ final class AudioRecorder {
                 self.elapsed = recorder.currentTime
                 // Map -60...0 dB to 0...1 for the level ring.
                 self.level = max(0, min(1, (recorder.averagePower(forChannel: 0) + 60) / 60))
+                self.loudestPower = max(self.loudestPower, recorder.peakPower(forChannel: 0))
             }
         }
     }

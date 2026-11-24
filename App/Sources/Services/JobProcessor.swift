@@ -34,6 +34,22 @@ final class JobProcessor {
         Task { await process(recording) }
     }
 
+    private func discard(_ recording: Recording) {
+        try? FileManager.default.removeItem(at: recording.fileURL)
+        context.delete(recording)
+        try? context.save()
+    }
+
+    /// Removes jobs that ended up with no recordings and no items (only silence was recorded).
+    /// Runs at launch, when no job screen is open.
+    func removeEmptyJobs() {
+        let jobs = (try? context.fetch(FetchDescriptor<Job>())) ?? []
+        for job in jobs where job.recordings.isEmpty && job.items.isEmpty && job.invoices.isEmpty {
+            context.delete(job)
+        }
+        try? context.save()
+    }
+
     /// Re-runs anything that failed or was interrupted, e.g. after the phone regains signal.
     func retryPending() async {
         let descriptor = FetchDescriptor<Recording>()
@@ -86,9 +102,10 @@ final class JobProcessor {
                 try? context.save()
                 recording.transcript = try await Transcriber.transcribe(fileURL: recording.fileURL)
             }
-            guard !recording.transcript.isEmpty else {
-                recording.state = .done
-                try? context.save()
+            guard !recording.transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                // No words were heard: drop the recording. A job left with nothing in it is
+                // cleaned up the next time the app opens (it may be on screen right now).
+                discard(recording)
                 return
             }
 

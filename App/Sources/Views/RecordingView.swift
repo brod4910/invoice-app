@@ -18,13 +18,14 @@ struct RecordingView: View {
     @State private var errorMessage: String?
     @State private var replaced = false
 
-    enum Phase { case recording, saved }
+    enum Phase { case recording, saved, nothingHeard }
 
     var body: some View {
         VStack(spacing: 32) {
             switch phase {
             case .recording: recordingBody
             case .saved: savedBody
+            case .nothingHeard: nothingHeardBody
             }
         }
         .padding(24)
@@ -108,6 +109,32 @@ struct RecordingView: View {
         }
     }
 
+    private var nothingHeardBody: some View {
+        VStack(spacing: 32) {
+            Spacer()
+            Image(systemName: "ear.trianglebadge.exclamationmark")
+                .font(.system(size: 100))
+                .foregroundStyle(.orange)
+            Text("I didn't hear anything").font(.largeTitle.bold()).multilineTextAlignment(.center)
+            Text("Nothing was saved. Hold the phone closer and talk normally.")
+                .font(.title3)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button { phase = .recording; begin() } label: {
+                Label("Try again", systemImage: "mic.fill")
+                    .font(.largeTitle.bold())
+                    .frame(maxWidth: .infinity, minHeight: 96)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            Button { onFinish(job) } label: {
+                Text("Close").font(.title2.bold()).frame(maxWidth: .infinity, minHeight: 64)
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
     private func begin() {
         Task {
             do {
@@ -125,6 +152,12 @@ struct RecordingView: View {
         guard clip.duration >= 1 else {
             try? FileManager.default.removeItem(at: AudioStorage.directory.appendingPathComponent(clip.fileName))
             if job == nil { onFinish(nil) } else { phase = .saved }
+            return
+        }
+        // Silence (a pocket, a quiet room, the mic covered): don't make a recording or a job.
+        guard clip.heardSound else {
+            try? FileManager.default.removeItem(at: AudioStorage.directory.appendingPathComponent(clip.fileName))
+            phase = .nothingHeard
             return
         }
         if let replacing, !replaced {

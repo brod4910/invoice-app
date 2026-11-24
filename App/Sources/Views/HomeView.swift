@@ -136,7 +136,9 @@ struct StatusBadge: View {
     let job: Job
 
     var body: some View {
-        if job.isProcessing {
+        if job.recordings.isEmpty && job.items.isEmpty {
+            Label("Nothing was heard", systemImage: "ear.trianglebadge.exclamationmark").foregroundStyle(.secondary)
+        } else if job.isProcessing {
             Label("Working on it…", systemImage: "hourglass").foregroundStyle(.orange)
         } else if job.recordings.contains(where: { $0.state == .failed }) {
             Label("Couldn't finish. Open to fix", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
