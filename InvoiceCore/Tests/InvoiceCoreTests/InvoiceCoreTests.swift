@@ -357,14 +357,20 @@ final class AccountingExportTests: XCTestCase {
 
     func testInvoicesCSV() {
         let lines = AccountingExport.invoicesCSV(makeJobs(), taxRatePercent: 0).components(separatedBy: "\r\n")
-        XCTAssertEqual(lines[0], "Invoice #,Date,Client,Email,Address,Job,Status,Subtotal,Tax,Total,Missing prices")
-        XCTAssertEqual(lines[1], ",2026-11-02,\"Bob's \"\"Diner\"\"\",,,Gate,Needs review,0.00,0.00,0.00,Yes")
-        XCTAssertEqual(lines[2], "0007,2026-11-20,Mary Johnson,mary@example.com,\"12 Oak St, Springfield\",Fence repair,Invoiced,330.00,0.00,330.00,")
+        XCTAssertEqual(lines[0], "Invoice #,Date,Client,Email,Address,Job,Status,Subtotal,Tax,Total,Missing prices,What he said,Notes")
+        XCTAssertEqual(lines[1], ",2026-11-02,\"Bob's \"\"Diner\"\"\",,,Gate,Needs review,0.00,0.00,0.00,Yes,,")
+        XCTAssertEqual(lines[2], "0007,2026-11-20,Mary Johnson,mary@example.com,\"12 Oak St, Springfield\",Fence repair,Invoiced,330.00,0.00,330.00,,,")
     }
 
     func testTax() {
         let csv = AccountingExport.invoicesCSV([makeJobs()[0]], taxRatePercent: 8.25)
         XCTAssertTrue(csv.contains(",330.00,27.23,357.23,"))
+    }
+
+    func testTranscriptInExport() {
+        var job = makeJobs()[0]
+        job.whatWasSaid = "Fixed the fence, also cleaned gutters"
+        XCTAssertTrue(AccountingExport.invoicesCSV([job], taxRatePercent: 0).contains(",\"Fixed the fence, also cleaned gutters\","))
     }
 
     func testLineItemsCSV() {

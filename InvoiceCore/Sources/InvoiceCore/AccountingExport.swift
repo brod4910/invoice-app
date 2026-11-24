@@ -11,8 +11,14 @@ public struct ExportJob: Equatable, Sendable {
     /// e.g. "Invoiced", "Ready", "Needs review"
     public var status: String
     public var lines: [ExportLine]
+    /// Every transcript for the job, so work that never became a line item is still on record.
+    public var whatWasSaid: String
+    public var notes: String
 
-    public init(invoiceNumber: Int?, date: Date, client: String, email: String, address: String, job: String, status: String, lines: [ExportLine]) {
+    public init(invoiceNumber: Int?, date: Date, client: String, email: String, address: String, job: String, status: String,
+                lines: [ExportLine], whatWasSaid: String = "", notes: String = "") {
+        self.whatWasSaid = whatWasSaid
+        self.notes = notes
         self.invoiceNumber = invoiceNumber
         self.date = date
         self.client = client
@@ -47,7 +53,7 @@ public struct ExportLine: Equatable, Sendable {
 /// Opens in Excel, Numbers and Google Sheets, and imports into most accounting software.
 public enum AccountingExport {
     public static func invoicesCSV(_ jobs: [ExportJob], taxRatePercent: Double) -> String {
-        var rows = [["Invoice #", "Date", "Client", "Email", "Address", "Job", "Status", "Subtotal", "Tax", "Total", "Missing prices"]]
+        var rows = [["Invoice #", "Date", "Client", "Email", "Address", "Job", "Status", "Subtotal", "Tax", "Total", "Missing prices", "What he said", "Notes"]]
         for job in jobs.sorted(by: { $0.date < $1.date }) {
             let subtotal = job.subtotalCents
             let tax = taxRatePercent > 0 ? Int((Double(subtotal) * taxRatePercent / 100).rounded()) : 0
@@ -63,6 +69,8 @@ public enum AccountingExport {
                 amount(tax),
                 amount(subtotal + tax),
                 job.lines.contains { $0.unitPriceCents == nil } ? "Yes" : "",
+                job.whatWasSaid,
+                job.notes,
             ])
         }
         return csv(rows)

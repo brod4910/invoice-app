@@ -113,7 +113,9 @@ struct ExportView: View {
                 status: job.status.label,
                 lines: job.sortedItems.map {
                     ExportLine(description: $0.itemDescription, details: $0.details, quantity: $0.quantity, unitPriceCents: $0.unitPriceCents)
-                }
+                },
+                whatWasSaid: job.sortedRecordings.map(\.transcript).filter { !$0.isEmpty }.joined(separator: "\n\n"),
+                notes: job.notes
             )
         }
         let tax = BusinessSettings.info.taxRatePercent
