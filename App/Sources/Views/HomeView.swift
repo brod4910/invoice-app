@@ -139,7 +139,7 @@ struct StatusBadge: View {
         if job.isProcessing {
             Label("Working on it…", systemImage: "hourglass").foregroundStyle(.orange)
         } else if job.recordings.contains(where: { $0.state == .failed }) {
-            Label("Will try again", systemImage: "exclamationmark.arrow.circlepath").foregroundStyle(.orange)
+            Label("Couldn't finish. Open to fix", systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
         } else {
             switch job.status {
             case .draft: Label(job.status.label, systemImage: "pencil").foregroundStyle(.blue)
