@@ -25,6 +25,9 @@ targets:
         DEVELOPMENT_TEAM: $(APP_TEAM_ID)
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.0"
+        MARKETING_VERSION: "1.0"
+        # Raise by 1 for every TestFlight upload (App Store Connect rejects a repeated build number).
+        CURRENT_PROJECT_VERSION: "1"
         GENERATE_INFOPLIST_FILE: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_CFBundleDisplayName: Invoices
@@ -40,6 +43,8 @@ targets:
         GoogleRedirectScheme: $(GOOGLE_REVERSED_CLIENT_ID)
         ExtractionProxyURL: $(EXTRACTION_PROXY_URL)
         ExtractionAppToken: $(EXTRACTION_APP_TOKEN)
+        # Only standard HTTPS: skips the export-compliance question on every upload.
+        ITSAppUsesNonExemptEncryption: false
   InvoiceCoreTests:
     type: bundle.unit-test
     platform: iOS
