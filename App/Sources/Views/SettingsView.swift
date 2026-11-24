@@ -19,7 +19,7 @@ struct SettingsView: View {
                 if let account = gmail.signedInEmail {
                     LabeledContent("Signed in as", value: account)
                     if UserDefaults.standard.bool(forKey: ContactLookup.needsSignInKey) {
-                        Text("Sign out and sign in again so the app can look up client emails in your contacts.")
+                        Text("Sign out and sign in again so the app can look up client emails in your contacts and mail.")
                             .foregroundStyle(.orange)
                     }
                     Button("Sign out", role: .destructive) { gmail.signOut() }
@@ -37,7 +37,7 @@ struct SettingsView: View {
                     .font(.title3.bold())
                 }
                 if let gmailError { Text(gmailError).foregroundStyle(.red) }
-                Text("The app only creates drafts. Nothing is sent until you press Send in Gmail. It reads your contacts only to find a client's email.")
+                Text("The app only creates drafts. Nothing is sent until you press Send in Gmail. It reads your contacts and mail only to find a client's email address.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

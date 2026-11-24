@@ -13,7 +13,8 @@ final class GoogleAuth: NSObject {
     static let scopes = [
         "openid", "email",
         "https://www.googleapis.com/auth/gmail.compose",
-        // Read-only, to look up a client's email by name.
+        // Read-only, to look up a client's email by name or job address.
+        "https://www.googleapis.com/auth/gmail.readonly",
         "https://www.googleapis.com/auth/contacts.readonly",
         "https://www.googleapis.com/auth/contacts.other.readonly",
     ]

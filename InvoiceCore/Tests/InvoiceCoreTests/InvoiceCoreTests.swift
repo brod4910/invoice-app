@@ -461,4 +461,18 @@ final class AccountingExportTests: XCTestCase {
         // Company name said exactly.
         XCTAssertEqual(ContactEmailMatching.pick(name: "Acme", candidates: [ContactCandidate(names: [" ", "Acme"], emails: ["office@acme.com"])]), "office@acme.com")
     }
+
+    func testMailHeadersAndAddressSearch() {
+        let mail = MailParticipants.parse(headers: ["\"Johnson, Mary\" <mary@example.com>", "dad@gmail.com, Bob <bob@example.com>"])
+        XCTAssertEqual(mail.people.map(\.emails), [["mary@example.com"], ["dad@gmail.com"], ["bob@example.com"]])
+        XCTAssertEqual(mail.people[0].names, ["Johnson, Mary"])
+
+        let quote = MailParticipants.parse(headers: ["Mary <mary@example.com>", "dad@gmail.com"])
+        let alert = MailParticipants.parse(headers: ["no-reply@city.gov", "dad@gmail.com"])
+        XCTAssertEqual(ContactEmailMatching.pickByAddress(mails: [quote, alert], ownEmail: "Dad@gmail.com"), "mary@example.com")
+        XCTAssertNil(ContactEmailMatching.pickByAddress(mails: [quote, mail], ownEmail: "dad@gmail.com"))
+
+        XCTAssertEqual(ContactEmailMatching.addressSearchTerm("123 Oak Street, Apt 4"), "123 Oak")
+        XCTAssertNil(ContactEmailMatching.addressSearchTerm("Oak Street"))
+    }
 }

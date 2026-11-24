@@ -46,3 +46,68 @@ public enum ContactEmailMatching {
             .filter { !$0.isEmpty }
     }
 }
+
+/// One email someone exchanged with Dad: who it was from and to, from the message headers.
+public struct MailParticipants: Equatable, Sendable {
+    public var people: [ContactCandidate]
+    public init(people: [ContactCandidate]) { self.people = people }
+
+    /// Parses From/To/Cc header values like `Mary Johnson <mary@x.com>, bob@y.com`.
+    public static func parse(headers: [String]) -> MailParticipants {
+        var people: [ContactCandidate] = []
+        for header in headers {
+            for part in splitAddresses(header) {
+                let trimmed = part.trimmingCharacters(in: .whitespaces)
+                if let open = trimmed.lastIndex(of: "<"), let close = trimmed.lastIndex(of: ">"), open < close {
+                    let email = String(trimmed[trimmed.index(after: open)..<close])
+                    let name = trimmed[..<open].trimmingCharacters(in: CharacterSet(charactersIn: "\" ").union(.whitespaces))
+                    people.append(ContactCandidate(names: name.isEmpty ? [] : [name], emails: [email]))
+                } else if EmailAddress.isPlausible(trimmed) {
+                    people.append(ContactCandidate(names: [], emails: [trimmed]))
+                }
+            }
+        }
+        return MailParticipants(people: people)
+    }
+
+    /// Splits on commas that aren't inside quotes ("Johnson, Mary" <m@x.com>).
+    static func splitAddresses(_ header: String) -> [String] {
+        var parts: [String] = []
+        var current = ""
+        var quoted = false
+        for ch in header {
+            if ch == "\"" { quoted.toggle() }
+            if ch == "," && !quoted { parts.append(current); current = "" } else { current.append(ch) }
+        }
+        parts.append(current)
+        return parts
+    }
+}
+
+extension ContactEmailMatching {
+    /// From emails that mention the job address: the one other person in all of them.
+    /// Dad's own address and no-reply senders are ignored. Nil unless exactly one address is left.
+    public static func pickByAddress(mails: [MailParticipants], ownEmail: String?) -> String? {
+        let own = ownEmail?.lowercased()
+        let emails = Set(
+            mails.flatMap(\.people).flatMap(\.emails)
+                .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+                .filter { $0 != own && EmailAddress.isPlausible($0) && !isAutomated($0) }
+        )
+        return emails.count == 1 ? emails.first : nil
+    }
+
+    static func isAutomated(_ email: String) -> Bool {
+        let local = email.split(separator: "@").first.map(String.init) ?? ""
+        return ["noreply", "no-reply", "donotreply", "do-not-reply", "notifications", "mailer-daemon"]
+            .contains { local.contains($0) }
+    }
+
+    /// The street number and name to search mail for: "123 Oak Street Apt 4" -> "123 Oak".
+    /// Short, so "Oak St" and "Oak Street" both match. Nil if it doesn't start with a number.
+    public static func addressSearchTerm(_ address: String) -> String? {
+        let words = address.components(separatedBy: CharacterSet.alphanumerics.inverted).filter { !$0.isEmpty }
+        guard words.count >= 2, words[0].allSatisfy(\.isNumber) else { return nil }
+        return "\(words[0]) \(words[1])"
+    }
+}
