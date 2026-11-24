@@ -504,4 +504,24 @@ final class AccountingExportTests: XCTestCase {
         XCTAssertEqual(ExtractionGrounding.ground(raw, transcript: "fixed the hole in the wall 200", checkItemWords: false).items.count, 1)
         XCTAssertEqual(ExtractionGrounding.ground(raw, transcript: "fixed the hole in the wall 200").items.count, 0)
     }
+
+    // MARK: Job record
+
+    func testJobRecordListsEverythingSaid() {
+        let record = JobRecord(
+            invoiceNumber: 7, clientName: "Mary Johnson", address: "12 Oak St",
+            jobDate: Date(timeIntervalSince1970: 1_763_600_000),
+            items: [JobRecord.Item(description: "Paint kitchen", quantity: 1, unitPriceCents: 45_000),
+                    JobRecord.Item(description: "Clean gutters", quantity: 1, unitPriceCents: nil)],
+            said: [JobRecord.Said(at: Date(timeIntervalSince1970: 1_763_600_000), text: "painted kitchen 450, also gutters")],
+            notes: "Check gutter price"
+        )
+        let text = record.plainText(timeZone: TimeZone(identifier: "UTC")!)
+        XCTAssertEqual(record.subject, "Job record for Invoice #0007 - Mary Johnson")
+        XCTAssertTrue(text.contains("- Paint kitchen: $450.00"))
+        XCTAssertTrue(text.contains("- Clean gutters: NO PRICE"))
+        XCTAssertTrue(text.contains("painted kitchen 450, also gutters"))
+        XCTAssertTrue(text.contains("NOTES\nCheck gutter price"))
+        XCTAssertTrue(record.html().contains("&lt;") == false)
+    }
 }

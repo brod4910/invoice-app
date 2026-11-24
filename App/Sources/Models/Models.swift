@@ -157,6 +157,8 @@ final class Invoice {
     var number: Int = 0
     var sentTo: String = ""
     var gmailDraftID: String = ""
+    /// The private job-record draft (transcripts and notes) made next to the invoice.
+    var recordDraftID: String = ""
     var createdAt: Date = Date()
     var totalCents: Int = 0
     /// What the drafted invoice contained, to tell when the job has changed since.

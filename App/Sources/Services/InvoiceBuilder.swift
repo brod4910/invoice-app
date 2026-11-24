@@ -74,14 +74,45 @@ enum InvoiceBuilder {
         job.status = .invoiced
         try? context.save()
 
+        // The private job record goes in a second draft, never to the client. If it fails,
+        // the invoice draft is still fine; it's tried again on the next update.
+        let record = jobRecord(for: job, number: number)
+        let recordTo = BusinessSettings.recordEmail
+        if let saved = try? await gmail.saveDraft(
+            replacing: invoice.recordDraftID,
+            to: EmailAddress.isPlausible(recordTo) ? recordTo : nil,
+            subject: record.subject,
+            html: record.html(),
+            text: record.plainText()
+        ) {
+            invoice.recordDraftID = saved.id
+            try? context.save()
+        }
+
         switch result {
         case .updated:
-            return "Your Gmail draft has been updated with the latest items. Open Gmail, check it, and press Send."
+            return "Your Gmail draft has been updated with the latest items. Open Gmail, check it, and press Send. The job record draft was updated too."
         case .created(_, let replacedMissing):
             return replacedMissing
                 ? "The earlier draft was already sent or deleted in Gmail, so a new draft was made. Check Gmail before sending it."
-                : "The invoice is in your Gmail drafts. Open Gmail, check it, and press Send."
+                : "The invoice is in your Gmail drafts, with a second draft holding everything you said. Open Gmail, check the invoice, and press Send."
         }
+    }
+
+    static func jobRecord(for job: Job, number: Int) -> JobRecord {
+        JobRecord(
+            invoiceNumber: number,
+            clientName: job.client?.name ?? (job.clientNameHint == "Unknown client" ? "" : job.clientNameHint),
+            address: job.displayAddress,
+            jobDate: job.jobDate,
+            items: job.sortedItems.map {
+                JobRecord.Item(description: $0.itemDescription, quantity: $0.quantity, unitPriceCents: $0.unitPriceCents)
+            },
+            said: job.sortedRecordings.filter { !$0.transcript.isEmpty }.map {
+                JobRecord.Said(at: $0.recordedAt, text: $0.transcript)
+            },
+            notes: job.notes
+        )
     }
 
     /// Problems worth showing before drafting. Empty means good to go.

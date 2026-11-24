@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(GmailClient.self) private var gmail
     @AppStorage(BusinessSettings.Key.name) private var name = ""
+    @AppStorage(BusinessSettings.Key.recordEmail) private var recordEmail = ""
     @AppStorage(BusinessSettings.Key.owner) private var owner = ""
     @AppStorage(BusinessSettings.Key.address) private var address = ""
     @AppStorage(BusinessSettings.Key.phone) private var phone = ""
@@ -58,6 +59,17 @@ struct SettingsView: View {
                 TextField("Email", text: $email)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
+            }
+
+            Section {
+                TextField("Email for job records (optional)", text: $recordEmail)
+                    .keyboardType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            } header: {
+                Text("Job records")
+            } footer: {
+                Text("With each invoice, a second Gmail draft lists everything said about the job, so nothing is missed. It's addressed to this email, or to no one if blank. It never goes to the client.")
             }
 
             Section("Invoices") {

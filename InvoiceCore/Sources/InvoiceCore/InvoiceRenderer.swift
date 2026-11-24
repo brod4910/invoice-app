@@ -127,7 +127,7 @@ public enum InvoiceRenderer {
 
     // MARK: - Helpers
 
-    static func escape(_ s: String) -> String {
+    public static func escape(_ s: String) -> String {
         s.replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")
@@ -135,7 +135,7 @@ public enum InvoiceRenderer {
             .replacingOccurrences(of: "\n", with: "<br>")
     }
 
-    static func formatQuantity(_ q: Double) -> String {
+    public static func formatQuantity(_ q: Double) -> String {
         q == q.rounded() ? String(Int(q)) : String(format: "%.2f", q)
     }
 

@@ -14,6 +14,7 @@ enum BusinessSettings {
         static let terms = "business.terms"
         static let tax = "business.taxPercent"
         static let nextInvoice = "business.nextInvoiceNumber"
+        static let recordEmail = "business.jobRecordEmail"
     }
 
     static var info: BusinessInfo {
@@ -26,6 +27,11 @@ enum BusinessSettings {
             paymentTerms: defaults.string(forKey: Key.terms) ?? "",
             taxRatePercent: defaults.double(forKey: Key.tax)
         )
+    }
+
+    /// Who the job-record draft is addressed to (e.g. Brian). Empty: no recipient.
+    static var recordEmail: String {
+        defaults.string(forKey: Key.recordEmail)?.trimmingCharacters(in: .whitespaces) ?? ""
     }
 
     /// Next invoice number to use. Starts at 1.
