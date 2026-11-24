@@ -198,16 +198,21 @@ final class JobProcessor {
         job.status = .draft
     }
 
-    /// Fills a client's email from Google or iPhone contacts when exactly one address matches.
+    /// Fills a client's email from contacts or Gmail when exactly one address matches.
     private func lookUpEmail(for client: Client, address: String) {
+        Task { await findEmail(for: client, address: address) }
+    }
+
+    /// Looks up and saves the client's email. Returns true if one was found.
+    @discardableResult
+    func findEmail(for client: Client, address: String) async -> Bool {
         let name = client.name
         let own = UserDefaults.standard.string(forKey: "gmail.signedInEmail")
-        Task {
-            guard let email = await ContactLookup.email(forName: name, address: address, ownEmail: own),
-                  client.modelContext != nil, client.email.isEmpty, client.name == name else { return }
-            client.email = email
-            try? context.save()
-        }
+        guard let email = await ContactLookup.email(forName: name, address: address, ownEmail: own),
+              client.modelContext != nil, client.email.isEmpty, client.name == name else { return false }
+        client.email = email
+        try? context.save()
+        return true
     }
 
     private func knownClientNames() -> [String] {

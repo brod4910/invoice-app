@@ -10,6 +10,10 @@ struct InvoicePreviewView: View {
     @State private var working = false
     @State private var message: String?
     @State private var succeeded = false
+    @State private var emailSearch: EmailSearch = .idle
+    @Environment(JobProcessor.self) private var processor
+
+    enum EmailSearch { case idle, searching, found, notFound }
 
     /// Reuse the job's earlier invoice number if it already has one, so numbers don't skip.
     private var number: Int {
@@ -30,6 +34,7 @@ struct InvoicePreviewView: View {
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            emailSearchStatus
 
             PDFPreview(data: InvoicePDF.make(doc))
 
@@ -54,6 +59,7 @@ struct InvoicePreviewView: View {
             }
             .padding()
         }
+        .task { await searchForEmail() }
         .navigationTitle("Invoice #\(doc.formattedNumber)")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -87,3 +93,47 @@ private struct PDFPreview: UIViewRepresentable {
         view.document = PDFDocument(data: data)
     }
 }
+
+extension InvoicePreviewView {
+    @ViewBuilder
+    fileprivate var emailSearchStatus: some View {
+        switch emailSearch {
+        case .searching:
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("Looking for the client's email in your contacts and Gmail…")
+            }
+            .font(.title3)
+            .padding(.horizontal)
+        case .found:
+            Label("Found the email: \(job.client?.email ?? "")", systemImage: "checkmark.circle.fill")
+                .font(.title3)
+                .foregroundStyle(.green)
+                .padding(.horizontal)
+        case .notFound:
+            Text(job.client == nil
+                 ? "Choose the client on the job screen first."
+                 : "Couldn't find one clear email for \(job.client?.name ?? "this client"). Tap the client's name on the job screen to type it.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
+        case .idle:
+            EmptyView()
+        }
+    }
+
+    /// Fills a missing email when the invoice is opened, for jobs recorded before lookup existed
+    /// or when the name was fixed by hand.
+    fileprivate func searchForEmail() async {
+        guard EmailAddress.isPlausible(job.client?.email) == false else { return }
+        guard let client = job.client, !client.name.isEmpty else {
+            emailSearch = .notFound
+            return
+        }
+        // Something was typed but looks wrong: leave it for Dad to fix, don't overwrite it.
+        guard client.email.isEmpty else { return }
+        emailSearch = .searching
+        emailSearch = await processor.findEmail(for: client, address: job.address) ? .found : .notFound
+    }
+}
+
