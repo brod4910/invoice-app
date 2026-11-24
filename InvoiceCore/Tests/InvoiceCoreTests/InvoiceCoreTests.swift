@@ -445,4 +445,20 @@ final class AccountingExportTests: XCTestCase {
         XCTAssertEqual(ExistingItem.numberedList(paintJob + [ExistingItem(description: "Haul trash", unitPriceCents: nil)]),
                        ["1. Paint kitchen and clean floor ($450.00)", "2. Haul trash (no price)"])
     }
+
+    // MARK: Contact email lookup
+
+    func testContactEmailOnlyWhenClear() {
+        let mary = ContactCandidate(names: ["Mary A. Johnson"], emails: ["mary@example.com"])
+        let otherMary = ContactCandidate(names: ["Mary Smith"], emails: ["msmith@example.com"])
+        XCTAssertEqual(ContactEmailMatching.pick(name: "Mary Johnson", candidates: [mary, otherMary]), "mary@example.com")
+        // First name alone is too vague.
+        XCTAssertNil(ContactEmailMatching.pick(name: "Mary", candidates: [mary, otherMary]))
+        // Same person found twice (Google and phone) is still one answer.
+        XCTAssertEqual(ContactEmailMatching.pick(name: "mary johnson", candidates: [mary, ContactCandidate(names: ["Mary Johnson"], emails: ["MARY@example.com "])]), "mary@example.com")
+        // Two different addresses: leave it blank.
+        XCTAssertNil(ContactEmailMatching.pick(name: "Mary Johnson", candidates: [ContactCandidate(names: ["Mary Johnson"], emails: ["a@example.com", "b@example.com"])]))
+        // Company name said exactly.
+        XCTAssertEqual(ContactEmailMatching.pick(name: "Acme", candidates: [ContactCandidate(names: [" ", "Acme"], emails: ["office@acme.com"])]), "office@acme.com")
+    }
 }

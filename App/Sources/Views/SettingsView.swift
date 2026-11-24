@@ -18,18 +18,26 @@ struct SettingsView: View {
             Section("Gmail") {
                 if let account = gmail.signedInEmail {
                     LabeledContent("Signed in as", value: account)
+                    if UserDefaults.standard.bool(forKey: ContactLookup.needsSignInKey) {
+                        Text("Sign out and sign in again so the app can look up client emails in your contacts.")
+                            .foregroundStyle(.orange)
+                    }
                     Button("Sign out", role: .destructive) { gmail.signOut() }
                 } else {
                     Button("Sign in to Gmail") {
                         Task {
-                            do { try await gmail.signIn(); gmailError = nil }
+                            do {
+                                try await gmail.signIn()
+                                gmailError = nil
+                                UserDefaults.standard.set(false, forKey: ContactLookup.needsSignInKey)
+                            }
                             catch { gmailError = error.localizedDescription }
                         }
                     }
                     .font(.title3.bold())
                 }
                 if let gmailError { Text(gmailError).foregroundStyle(.red) }
-                Text("The app only creates drafts. Nothing is sent until you press Send in Gmail.")
+                Text("The app only creates drafts. Nothing is sent until you press Send in Gmail. It reads your contacts only to find a client's email.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

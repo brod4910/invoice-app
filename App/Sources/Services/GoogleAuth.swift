@@ -10,7 +10,13 @@ import UIKit
 final class GoogleAuth: NSObject {
     static let shared = GoogleAuth()
 
-    static let scopes = ["openid", "email", "https://www.googleapis.com/auth/gmail.compose"]
+    static let scopes = [
+        "openid", "email",
+        "https://www.googleapis.com/auth/gmail.compose",
+        // Read-only, to look up a client's email by name.
+        "https://www.googleapis.com/auth/contacts.readonly",
+        "https://www.googleapis.com/auth/contacts.other.readonly",
+    ]
 
     private var accessToken: String?
     private var accessTokenExpiry = Date.distantPast

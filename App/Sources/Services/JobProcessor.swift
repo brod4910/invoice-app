@@ -173,6 +173,9 @@ final class JobProcessor {
             if client.email.isEmpty, let email = result.clientEmail { client.email = email }
             if client.phone.isEmpty, let phone = result.clientPhone { client.phone = phone }
         }
+        if let client = job.client, client.email.isEmpty, !client.name.isEmpty {
+            lookUpEmail(for: client)
+        }
         if job.title.isEmpty, let title = result.jobTitle { job.title = title }
         if let notes = result.notes, !notes.isEmpty {
             job.notes = job.notes.isEmpty ? notes : job.notes + "\n" + notes
@@ -193,6 +196,17 @@ final class JobProcessor {
             next += 1
         }
         job.status = .draft
+    }
+
+    /// Fills a client's email from Google or iPhone contacts when exactly one address matches.
+    private func lookUpEmail(for client: Client) {
+        let name = client.name
+        Task {
+            guard let email = await ContactLookup.email(forName: name),
+                  client.modelContext != nil, client.email.isEmpty, client.name == name else { return }
+            client.email = email
+            try? context.save()
+        }
     }
 
     private func knownClientNames() -> [String] {
