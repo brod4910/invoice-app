@@ -22,6 +22,7 @@ struct InvoiceApp: App {
                 .task {
                     await gmail.restore()
                     processor.removeEmptyJobs()
+                    processor.mergeDuplicateClients()
                     await processor.retryPending()
                 }
         }

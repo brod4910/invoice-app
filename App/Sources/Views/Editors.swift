@@ -102,9 +102,18 @@ struct ClientEditor: View {
     private func save() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         if job.client == nil, !trimmed.isEmpty {
-            let client = Client(name: trimmed)
-            context.insert(client)
-            job.client = client
+            // Reuse a past client with this exact name instead of saving them twice.
+            let all = (try? context.fetch(FetchDescriptor<Client>())) ?? []
+            if let existing = all.first(where: { ClientMatching.normalize($0.name) == ClientMatching.normalize(trimmed) }) {
+                job.client = existing
+                // Keep their saved email and phone unless something new was typed.
+                if email.trimmingCharacters(in: .whitespaces).isEmpty { email = existing.email }
+                if phone.isEmpty { phone = existing.phone }
+            } else {
+                let client = Client(name: trimmed)
+                context.insert(client)
+                job.client = client
+            }
         }
         if let client = job.client {
             client.name = trimmed
@@ -140,7 +149,7 @@ struct ClientPickerView: View {
     var body: some View {
         NavigationStack {
             List {
-                if !hint.isEmpty {
+                if !hint.isEmpty, !clients.contains(where: { ClientMatching.normalize($0.name) == ClientMatching.normalize(hint) }) {
                     Section {
                         Button {
                             let client = Client(name: hint)

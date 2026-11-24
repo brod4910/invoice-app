@@ -302,8 +302,12 @@ final class ClientResolverTests: XCTestCase {
         XCTAssertEqual(ClientResolver.resolve(name: "Mary", address: "7 Elm Avenue", history: history), .existing(maryJones.id))
     }
 
-    func testNameAndAddressDisagree() {
-        guard case .ambiguous = ClientResolver.resolve(name: "Mary Johnson", address: "9 Pine Road", history: history) else {
+    func testFullNameWinsOverSomeoneElsesAddress() {
+        XCTAssertEqual(ClientResolver.resolve(name: "Mary Johnson", address: "9 Pine Road", history: history), .existing(mary.id))
+    }
+
+    func testPartialNameAndAddressDisagree() {
+        guard case .ambiguous = ClientResolver.resolve(name: "Johnson", address: "9 Pine Road", history: history) else {
             return XCTFail("expected ambiguous")
         }
     }

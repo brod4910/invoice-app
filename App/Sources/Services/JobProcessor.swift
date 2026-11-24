@@ -60,6 +60,27 @@ final class JobProcessor {
 
     /// Removes jobs that ended up empty (only silence was recorded), e.g. if the app was
     /// closed mid-way. Runs at launch, when no job screen is open.
+    /// Folds together clients saved twice under the same name (e.g. by tapping "New client"
+    /// for a name that already existed), which would otherwise make every later job ask
+    /// "Which client is this?". Clients with the same name but different emails are left alone.
+    func mergeDuplicateClients() {
+        let clients = (try? context.fetch(FetchDescriptor<Client>())) ?? []
+        let groups = Dictionary(grouping: clients.filter { !$0.name.isEmpty }) { ClientMatching.normalize($0.name) }
+        for (_, group) in groups where group.count > 1 {
+            let emails = Set(group.map { $0.email.lowercased() }.filter { !$0.isEmpty })
+            guard emails.count <= 1 else { continue }
+            let keep = group.max { $0.jobs.count < $1.jobs.count }!
+            for other in group where other.id != keep.id {
+                for job in other.jobs { job.client = keep }
+                if keep.email.isEmpty { keep.email = other.email }
+                if keep.phone.isEmpty { keep.phone = other.phone }
+                if keep.address.isEmpty { keep.address = other.address }
+                context.delete(other)
+            }
+        }
+        try? context.save()
+    }
+
     func removeEmptyJobs() {
         let jobs = (try? context.fetch(FetchDescriptor<Job>())) ?? []
         for job in jobs where job.isEmpty {
@@ -223,6 +244,7 @@ final class JobProcessor {
     /// When it isn't clear, the job keeps the spoken name but no client, so the email stays blank
     /// and the job screen asks which client it is.
     private func resolveClient(for job: Job, spokenName: String?) {
+        mergeDuplicateClients()
         let clients = ((try? context.fetch(FetchDescriptor<Client>())) ?? []).filter { !$0.name.isEmpty }
         let history = clients.map { client in
             ClientRecord(

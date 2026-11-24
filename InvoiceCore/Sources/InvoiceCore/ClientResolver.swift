@@ -43,7 +43,12 @@ public enum ClientResolver {
                 return .new
             case 1:
                 let match = byName[0]
-                // The address belongs to someone else and not to this client: the two disagree.
+                // The full name said matches: that's the client, even at an address someone else
+                // used before (a repeat client at a new place, or a new owner).
+                if ClientMatching.normalize(match.name) == ClientMatching.normalize(spokenName) {
+                    return .existing(match.id)
+                }
+                // Only part of the name matched, and the address belongs to someone else: unclear.
                 if !atAddress.isEmpty, !atAddress.contains(where: { $0.id == match.id }) {
                     return .ambiguous([match.id] + atAddress.map(\.id))
                 }
