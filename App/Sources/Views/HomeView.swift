@@ -32,7 +32,7 @@ struct HomeView: View {
                             .padding(.top, 20)
                         ForEach(jobs.prefix(3)) { job in
                             NavigationLink(value: job) { JobCard(job: job) }
-                                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button { deletingJob = job } label: { Label("Delete", systemImage: "trash") }
                                         .tint(.red)
                                 }

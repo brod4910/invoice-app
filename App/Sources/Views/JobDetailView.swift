@@ -130,7 +130,7 @@ struct JobDetailView: View {
                 }
                 ForEach(job.sortedItems) { item in
                     LineItemRow(item: item) { editingItem = item }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button { deletingItem = item } label: { Label("Delete", systemImage: "trash") }
                                 .tint(.red)
                         }

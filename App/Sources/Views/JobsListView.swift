@@ -32,7 +32,7 @@ struct JobsListView: View {
             ForEach(jobs) { job in
                 NavigationLink { JobDetailView(job: job) } label: { JobCard(job: job) }
                     .listRowSeparator(.hidden)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                         Button { deletingJob = job } label: { Label("Delete", systemImage: "trash") }
                             .tint(.red)
                     }
