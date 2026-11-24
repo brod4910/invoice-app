@@ -374,4 +374,35 @@ final class AccountingExportTests: XCTestCase {
         XCTAssertEqual(AccountingExport.field("=SUM(A1)"), "'=SUM(A1)")
         XCTAssertEqual(AccountingExport.field("-12.50"), "-12.50")
     }
+
+    // MARK: One price for several tasks
+
+    func testWholeJobPriceFoldsSplitItemsIntoOne() {
+        let raw = ExtractionResult(items: [
+            ExtractedItem(description: "Paint kitchen", unitPriceCents: 45_000),
+            ExtractedItem(description: "clean floor"),
+        ])
+        let out = ExtractionGrounding.combineSharedPrice(raw, transcript: "paint kitchen and clean floor 450$ for the whole job")
+        XCTAssertEqual(out.items.count, 1)
+        XCTAssertEqual(out.items[0].description, "Paint kitchen and clean floor")
+        XCTAssertEqual(out.items[0].unitPriceCents, 45_000)
+    }
+
+    func testSeparatelyPricedWorkIsNotFolded() {
+        let raw = ExtractionResult(items: [
+            ExtractedItem(description: "Paint kitchen", unitPriceCents: 45_000),
+            ExtractedItem(description: "Clean floor"),
+        ])
+        let out = ExtractionGrounding.combineSharedPrice(raw, transcript: "paint kitchen 450, cleaned the floor, not sure what to charge yet")
+        XCTAssertEqual(out.items.count, 2)
+
+        let install = ExtractionGrounding.combineSharedPrice(raw, transcript: "paint kitchen 450, install in the hall closet")
+        XCTAssertEqual(install.items.count, 2)
+    }
+
+    func testJoinWork() {
+        XCTAssertEqual(ExtractionGrounding.joinWork(["fix door"]), "Fix door")
+        XCTAssertEqual(ExtractionGrounding.joinWork(["Paint kitchen", "Clean floor", "Haul trash"]),
+                       "Paint kitchen, clean floor and haul trash")
+    }
 }

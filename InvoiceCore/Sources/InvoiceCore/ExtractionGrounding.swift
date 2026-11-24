@@ -35,6 +35,56 @@ public enum ExtractionGrounding {
         return out
     }
 
+    /// Words that mean one price covers all the work said, e.g. "$450 for the whole job".
+    static let wholeJobCues = [
+        "whole job", "whole thing", "for everything", "for all of it", "for all that", "for both",
+        "all together", "altogether", "all in", "in total", "total of", "the total", "total is",
+        "total was", "total price", "one price", "flat rate", "flat fee", "for the job", "for the lot",
+    ]
+
+    /// Safety net for the on-device model splitting "paint kitchen and clean floor, $450 for the
+    /// whole job" into two items with the price on only one. When the transcript says the price
+    /// covers everything and only one item got a price, fold the work into that single item.
+    public static func combineSharedPrice(_ result: ExtractionResult, transcript: String) -> ExtractionResult {
+        let priced = result.items.filter { $0.unitPriceCents != nil }
+        let unpriced = result.items.filter { $0.unitPriceCents == nil }
+        guard priced.count == 1, !unpriced.isEmpty, let only = priced.first, only.quantity == 1 else { return result }
+        // Match whole words only, so "install in" doesn't count as "all in".
+        let said = " " + tokensAllLengths(transcript).joined(separator: " ") + " "
+        guard wholeJobCues.contains(where: { said.contains(" \($0) ") }) else { return result }
+
+        let details = result.items.compactMap(\.details).filter { !$0.isEmpty }
+        var out = result
+        out.items = [ExtractedItem(
+            description: joinWork(result.items.map(\.description)),
+            quantity: 1,
+            unitPriceCents: only.unitPriceCents,
+            details: details.isEmpty ? nil : details.joined(separator: "; ")
+        )]
+        return out
+    }
+
+    /// "paint kitchen", "clean floor" -> "Paint kitchen and clean floor".
+    public static func joinWork(_ parts: [String]) -> String {
+        let cleaned = parts.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard let first = cleaned.first else { return "" }
+        var lowered: [String] = cleaned.enumerated().map { index, part -> String in
+            index == 0 ? part : part.prefix(1).lowercased() + String(part.dropFirst())
+        }
+        lowered[0] = first.prefix(1).uppercased() + String(first.dropFirst())
+        switch lowered.count {
+        case 1: return lowered[0]
+        case 2: return lowered[0] + " and " + lowered[1]
+        default: return lowered.dropLast().joined(separator: ", ") + " and " + lowered.last!
+        }
+    }
+
+    static func tokensAllLengths(_ text: String) -> [String] {
+        text.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+    }
+
     /// Lowercased words of 3+ letters or digits.
     static func tokens(_ text: String) -> [String] {
         text.lowercased()

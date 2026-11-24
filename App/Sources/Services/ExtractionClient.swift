@@ -15,7 +15,10 @@ enum ExtractionClient {
             throw ExtractionError.unavailable(OnDeviceExtractor.unavailableReason ?? "Apple's on-device AI isn't available.")
         }
         // Drop anything the model made up: items, prices and names must come from what was said.
-        let grounded = ExtractionGrounding.ground(raw, transcript: request.transcript)
+        let grounded = ExtractionGrounding.combineSharedPrice(
+            ExtractionGrounding.ground(raw, transcript: request.transcript),
+            transcript: request.transcript
+        )
         // Fields Dad labels out loud ("Client …", "Address …") always win.
         return SpokenFields.parse(request.transcript).apply(to: grounded)
     }

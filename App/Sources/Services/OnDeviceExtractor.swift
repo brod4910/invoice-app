@@ -28,7 +28,12 @@ enum OnDeviceExtractor {
 
     static func extract(_ request: ExtractionRequest) async throws -> ExtractionResult {
         let session = LanguageModelSession(instructions: instructions)
-        let response = try await session.respond(to: prompt(for: request), generating: JobNotes.self)
+        // Greedy sampling: the same words always give the same write-up.
+        let response = try await session.respond(
+            to: prompt(for: request),
+            generating: JobNotes.self,
+            options: GenerationOptions(sampling: .greedy)
+        )
         return response.content.asResult()
     }
 
@@ -49,8 +54,11 @@ enum OnDeviceExtractor {
     Copy only what is in the transcript. Do not add anything that is not in it.
 
     Rules:
-    - Every item must be something the transcript says was done or charged for. If no work is described, return no items.
-    - A price must be a number said in the transcript. If no price is said for an item, leave its price empty.
+    - Make one charge for each price said. Put all the work that one price pays for in that charge.
+    - When one price covers several tasks, such as a price for the whole job, for both, or a total, those tasks share one charge. Do not split them up.
+    - Only make a charge with an empty price for work that clearly has no price said for it.
+    - Every charge must be work the transcript says was done. If no work is described, return no charges.
+    - A price must be a number said in the transcript. Never make up a price.
     - Prices are US dollars. For a per-unit or hourly price, set quantity to the count or hours. Otherwise quantity is 1.
     - Leave any field empty if the transcript does not mention it.
     - Write spoken email addresses with @ and dots.
@@ -71,8 +79,8 @@ struct JobNotes {
     var jobAddress: String?
     @Guide(description: "A few words summarizing the job, only if work is described")
     var jobTitle: String?
-    @Guide(description: "Each thing the transcript says was done or charged for. Empty if none.")
-    var items: [JobNotesItem]
+    @Guide(description: "One entry per price said, holding all the work that price pays for. Empty if no work is described.")
+    var charges: [JobNotesCharge]
     @Guide(description: "Anything unclear the reviewer should check")
     var notes: String?
 
@@ -83,9 +91,9 @@ struct JobNotes {
             clientPhone: clientPhone.nonEmpty,
             jobAddress: jobAddress.nonEmpty,
             jobTitle: jobTitle.nonEmpty,
-            items: items.map {
+            items: charges.map {
                 ExtractedItem(
-                    description: $0.title,
+                    description: ExtractionGrounding.joinWork($0.work),
                     quantity: $0.quantity > 0 ? $0.quantity : 1,
                     unitPriceCents: $0.priceDollars.map { Int(($0 * 100).rounded()) },
                     details: $0.details.nonEmpty
@@ -97,12 +105,12 @@ struct JobNotes {
 }
 
 @Generable
-struct JobNotesItem {
-    @Guide(description: "Short description of work the transcript says was done")
-    var title: String
-    @Guide(description: "How many units or hours; 1 if a single total")
+struct JobNotesCharge {
+    @Guide(description: "Every task this one price pays for, a few words each, as said. Several tasks when one price covers them all.")
+    var work: [String]
+    @Guide(description: "How many units or hours; 1 for a flat price")
     var quantity: Double
-    @Guide(description: "Price per unit in US dollars, only if the transcript says it")
+    @Guide(description: "The price said for this work in US dollars, per unit or hour if quantity is more than 1. Empty only if no price was said for it.")
     var priceDollars: Double?
     @Guide(description: "Materials, sizes or other specifics")
     var details: String?

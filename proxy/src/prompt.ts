@@ -8,6 +8,7 @@ Rules:
 - Only use prices the speaker actually says. If an item has no stated price, set unit_price_cents to null. Never estimate or invent a price.
 - Convert spoken amounts to cents: "a hundred and twenty five bucks" is 12500, "forty an hour" is 4000.
 - If a price is per unit or per hour, set quantity to the count or hours and unit_price_cents to the rate. If the speaker gives one total for an item, use quantity 1 and that total.
+- When one price covers several tasks ("$450 for the whole job", "for both", "total"), make a single item that names all of that work, e.g. "Paint kitchen and clean floor", with that price. Do not split work that shares one price into separate items.
 - Keep descriptions short and client-friendly ("Replace kitchen faucet"). Put materials, brands, sizes or other specifics in details.
 - If a correction is spoken ("no wait, it was three hours"), use the corrected value.
 - Write spoken email addresses in normal form ("mary at gmail dot com" is mary@gmail.com). Use null for anything not mentioned.
