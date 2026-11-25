@@ -551,6 +551,13 @@ final class AccountingExportTests: XCTestCase {
         XCTAssertFalse(ContactEmailMatching.domainMatches("bob@other.com", keys: ["crown"]))
         XCTAssertFalse(ContactEmailMatching.domainMatches("v@gmail.com", keys: ["crown"]))
         XCTAssertEqual(ContactEmailMatching.distinctiveWords(["crown", "management", "llc"]), ["crown"])
+        // Initials as the domain: Crown Management (Company) at cmc.rent.
+        XCTAssertEqual(ContactEmailMatching.initials(["crown", "management"]), "cm")
+        XCTAssertTrue(ContactEmailMatching.domainMatches("veronica@cmc.rent", keys: ["crown"], initials: "cm"))
+        XCTAssertTrue(ContactEmailMatching.domainMatches("earle@cmc.rent", keys: ["crown"], initials: "cmc"))
+        XCTAssertFalse(ContactEmailMatching.domainMatches("bob@cmsystems.com", keys: ["crown"], initials: "cm"))
+        XCTAssertFalse(ContactEmailMatching.domainMatches("cm@gmail.com", keys: ["crown"], initials: "cm"))
+        XCTAssertEqual(ContactEmailMatching.initials(["acme"]), "")
     }
 
     // MARK: Transcript cleanup

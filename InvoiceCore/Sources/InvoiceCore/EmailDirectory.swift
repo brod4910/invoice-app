@@ -44,9 +44,10 @@ public struct EmailDirectory: Codable, Equatable, Sendable {
         let spoken = ContactEmailMatching.words(name)
         guard !spoken.isEmpty else { return [] }
         let keys = ContactEmailMatching.distinctiveWords(spoken)
+        let short = ContactEmailMatching.initials(spoken)
         return entries.values
             .filter { ContactEmailMatching.matches(spoken: spoken, contactName: $0.name)
-                || ContactEmailMatching.domainMatches($0.email, keys: keys) }
+                || ContactEmailMatching.domainMatches($0.email, keys: keys, initials: short) }
             .sorted { $0.count != $1.count ? $0.count > $1.count : $0.lastSeen > $1.lastSeen }
             .map { EmailSuggestion(email: $0.email, name: $0.name, strong: true, mentions: $0.count) }
     }

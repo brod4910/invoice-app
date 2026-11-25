@@ -142,6 +142,7 @@ extension ContactEmailMatching {
         let spoken = words(name)
         guard !spoken.isEmpty else { return [] }
         let keys = distinctiveWords(spoken)
+        let short = initials(spoken)
         let own = ownEmail?.lowercased()
         var found: [String: EmailSuggestion] = [:]
         var order: [String] = []
@@ -170,7 +171,7 @@ extension ContactEmailMatching {
         }
         // A saved contact at the company's domain, even if the company isn't on the contact.
         for contact in contacts {
-            for email in contact.emails where domainMatches(email, keys: keys) {
+            for email in contact.emails where domainMatches(email, keys: keys, initials: short) {
                 add(email, name: contact.names.first, strong: true, mention: false)
             }
         }
@@ -179,7 +180,7 @@ extension ContactEmailMatching {
             for person in mail.people {
                 for email in person.emails where seen.insert(email.lowercased()).inserted {
                     let byName = person.names.contains { matches(spoken: spoken, contactName: $0) }
-                    add(email, name: person.names.first, strong: byName || domainMatches(email, keys: keys), mention: true)
+                    add(email, name: person.names.first, strong: byName || domainMatches(email, keys: keys, initials: short), mention: true)
                 }
             }
         }
@@ -210,19 +211,36 @@ extension ContactEmailMatching {
         return spoken.filter { $0.count >= 4 && !generic.contains($0) }
     }
 
+    /// The company's initials: "Crown Management" -> "cm", "Crown Management Company" -> "cmc".
+    static func initials(_ spoken: [String]) -> String {
+        let letters = spoken.filter { !["the", "and", "of", "a"].contains($0) }.compactMap(\.first)
+        return letters.count >= 2 ? String(letters) : ""
+    }
+
     /// The company's word in the email's domain (`veronica@crownmgmt.com`) or, for free mail,
-    /// in the name before the @ (`crownmanagement@gmail.com`).
-    static func domainMatches(_ email: String, keys: [String]) -> Bool {
+    /// in the name before the @ (`crownmanagement@gmail.com`). Also the company's initials as the
+    /// domain, with at most one extra letter for a "Company" or "Co" left unsaid:
+    /// Crown Management -> `@cmc.rent`.
+    static func domainMatches(_ email: String, keys: [String], initials: String = "") -> Bool {
+        if !initials.isEmpty, let domain = email.lowercased().split(separator: "@").last,
+           !isFreeMail(String(domain)),
+           domain.split(separator: ".").dropLast().contains(where: { $0.hasPrefix(initials) && $0.count <= initials.count + 1 }) {
+            return true
+        }
         guard !keys.isEmpty else { return false }
         let parts = email.lowercased().split(separator: "@")
         guard parts.count == 2 else { return false }
         let domainLabels = parts[1].split(separator: ".").dropLast()
+        let isFree = isFreeMail(String(parts[1]))
+        let haystack = isFree ? String(parts[0]) : domainLabels.joined(separator: ".")
+        return keys.contains { haystack.contains($0) }
+    }
+
+    static func isFreeMail(_ domain: String) -> Bool {
         let freeMail: Set<String> = [
             "gmail", "googlemail", "yahoo", "hotmail", "outlook", "live", "msn", "icloud", "me", "mac",
             "aol", "comcast", "att", "sbcglobal", "verizon", "cox", "charter", "proton", "protonmail",
         ]
-        let isFree = domainLabels.contains { freeMail.contains(String($0)) }
-        let haystack = isFree ? String(parts[0]) : domainLabels.joined(separator: ".")
-        return keys.contains { haystack.contains($0) }
+        return domain.lowercased().split(separator: ".").dropLast().contains { freeMail.contains(String($0)) }
     }
 }
