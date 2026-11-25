@@ -25,11 +25,14 @@ final class AudioRecorder {
 
     /// Starts recording a new clip. Turning on the microphone can block for a moment,
     /// so that part runs off the main thread to keep the screen responsive.
-    func start() async throws {
+    /// `withSpokenPrompts`: the guided recorder speaks questions between clips, so it keeps one
+    /// audio mode that can both play and record. Switching modes between clips left the
+    /// questions after the first one silent.
+    func start(withSpokenPrompts: Bool = false) async throws {
         let fileName = "\(UUID().uuidString).m4a"
         let url = AudioStorage.directory.appendingPathComponent(fileName)
         let box = try await Task.detached(priority: .userInitiated) {
-            try Self.startRecorder(at: url)
+            try Self.startRecorder(at: url, withSpokenPrompts: withSpokenPrompts)
         }.value
         recorder = box.recorder
         currentFileName = fileName
@@ -39,10 +42,14 @@ final class AudioRecorder {
         startTimer()
     }
 
-    private nonisolated static func startRecorder(at url: URL) throws -> RecorderBox {
+    private nonisolated static func startRecorder(at url: URL, withSpokenPrompts: Bool) throws -> RecorderBox {
         let session = AVAudioSession.sharedInstance()
-        // Record-only: the app never plays sound. Play-and-record switches the speaker on, which pops.
-        try session.setCategory(.record, mode: .default)
+        if withSpokenPrompts {
+            try setSpokenPromptMode()
+        } else {
+            // Record-only when nothing is spoken: play-and-record turns the speaker on, which can pop.
+            try session.setCategory(.record, mode: .default)
+        }
         try session.setActive(true)
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
@@ -54,6 +61,13 @@ final class AudioRecorder {
         recorder.isMeteringEnabled = true
         guard recorder.record() else { throw RecorderError.couldNotStart }
         return RecorderBox(recorder: recorder)
+    }
+
+    /// One mode for the whole guided recording: speak through the loudspeaker and record.
+    nonisolated static func setSpokenPromptMode() throws {
+        let session = AVAudioSession.sharedInstance()
+        guard session.category != .playAndRecord || !session.categoryOptions.contains(.defaultToSpeaker) else { return }
+        try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
     }
 
     /// Carries the recorder back to the main thread.

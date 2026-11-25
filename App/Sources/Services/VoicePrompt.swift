@@ -3,34 +3,33 @@ import AVFoundation
 /// Speaks the recorder's questions out loud ("Who is the client?") before listening.
 @MainActor
 final class VoicePrompt: NSObject, AVSpeechSynthesizerDelegate {
-    private let synthesizer = AVSpeechSynthesizer()
+    private var synthesizer: AVSpeechSynthesizer?
     private var finished: CheckedContinuation<Void, Never>?
-
-    override init() {
-        super.init()
-        synthesizer.delegate = self
-    }
 
     /// Says `text` and returns when it has finished, so the recording doesn't pick up the prompt.
     func say(_ text: String) async {
         stop()
         // Switching the audio session can block for a moment, so keep it off the main thread.
+        // Same audio mode the guided recorder uses, so nothing switches between question and answer.
         await Task.detached(priority: .userInitiated) {
-            let session = AVAudioSession.sharedInstance()
-            try? session.setCategory(.playback, mode: .spokenAudio)
-            try? session.setActive(true)
+            try? AudioRecorder.setSpokenPromptMode()
+            try? AVAudioSession.sharedInstance().setActive(true)
         }.value
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.9
+        // A fresh synthesizer each time: a reused one can go quiet after the audio session changes.
+        let speaker = AVSpeechSynthesizer()
+        speaker.delegate = self
+        synthesizer = speaker
         await withCheckedContinuation { continuation in
             finished = continuation
-            synthesizer.speak(utterance)
+            speaker.speak(utterance)
         }
     }
 
     func stop() {
-        if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
+        if let synthesizer, synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
         finished?.resume()
         finished = nil
     }

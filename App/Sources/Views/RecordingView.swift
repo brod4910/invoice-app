@@ -218,7 +218,7 @@ struct RecordingView: View {
                 speaking = false
             }
             do {
-                try await recorder.start()
+                try await recorder.start(withSpokenPrompts: guided)
                 errorMessage = nil
             } catch {
                 errorMessage = error.localizedDescription
