@@ -46,6 +46,8 @@ targets:
         ExtractionAppToken: $(EXTRACTION_APP_TOKEN)
         # Only standard HTTPS: skips the export-compliance question on every upload.
         ITSAppUsesNonExemptEncryption: false
+        # Keeps recording if the phone locks or Dad presses the side button mid-job.
+        UIBackgroundModes: [audio]
   InvoiceCoreTests:
     type: bundle.unit-test
     platform: iOS
