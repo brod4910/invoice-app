@@ -61,7 +61,8 @@ export const matchWithClaude: Matcher = async (req, env) => {
   if (req.people.length === 0) return { matches: [] };
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
   const response = await client.beta.messages.parse({
-    model: "claude-opus-5-5",
+    // Sonnet is plenty for matching names to emails, and cheaper than Opus (used for line items).
+    model: "claude-sonnet-5-5",
     max_tokens: 4000,
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
