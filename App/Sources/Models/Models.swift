@@ -108,6 +108,8 @@ final class Recording {
     var duration: TimeInterval = 0
     var stateRaw: String = RecordingState.recorded.rawValue
     var lastError: String = ""
+    /// Set when this clip answered one of the recorder's questions: "client" or "address".
+    var guidedKindRaw: String = ""
 
     init(fileName: String, duration: TimeInterval) {
         self.fileName = fileName
@@ -121,6 +123,8 @@ final class Recording {
     }
 
     var fileURL: URL { AudioStorage.directory.appendingPathComponent(fileName) }
+
+    var guidedKind: GuidedAnswer.Kind? { GuidedAnswer.Kind(rawValue: guidedKindRaw) }
 }
 
 @Model

@@ -73,7 +73,9 @@ final class AudioRecorder {
 
     /// Stops and returns the finished file name, duration, and whether anything loud enough
     /// to be speech was heard.
-    func stop() -> (fileName: String, duration: TimeInterval, heardSound: Bool)? {
+    /// `deactivate: false` keeps the audio session on between guided steps, so the next spoken
+    /// question isn't cut off.
+    func stop(deactivate: Bool = true) -> (fileName: String, duration: TimeInterval, heardSound: Bool)? {
         guard let recorder, let fileName = currentFileName else { return nil }
         let duration = recorder.currentTime > 0 ? recorder.currentTime : elapsed
         recorder.stop()
@@ -84,8 +86,10 @@ final class AudioRecorder {
         state = .idle
         level = 0
         // Deactivating blocks briefly, so do it off the main thread to keep the UI responsive.
-        Task.detached {
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if deactivate {
+            Task.detached {
+                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            }
         }
         return (fileName, duration, loudestPower >= Self.speechPeakThreshold)
     }

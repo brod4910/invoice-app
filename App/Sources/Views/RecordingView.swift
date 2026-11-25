@@ -1,3 +1,4 @@
+import InvoiceCore
 import SwiftData
 import SwiftUI
 
@@ -14,8 +15,61 @@ struct RecordingView: View {
     @State private var job: Job?
     @State private var phase: Phase = .recording
     @State private var errorMessage: String?
+    @AppStorage("recorder.talkMeThrough") private var talkMeThrough = true
+    @State private var prompt = VoicePrompt()
+    @State private var step: Step = .job
+    @State private var spokenStep: Step?
+    @State private var speaking = false
 
     enum Phase { case recording, saved, nothingHeard }
+
+    /// A new job asks for the client, then the address, then the work, so Dad doesn't have to
+    /// remember to say "client" and "address". Adding to a job goes straight to listening.
+    enum Step {
+        case client, address, job
+
+        var title: String {
+            switch self {
+            case .client: "Who is the client?"
+            case .address: "What's the address?"
+            case .job: "Now explain the job"
+            }
+        }
+
+        var hint: String {
+            switch self {
+            case .client: "Say their name, then tap Next."
+            case .address: "Say the address of the job, then tap Next."
+            case .job: "Say what you did and what each part costs. Tap Stop when you're done."
+            }
+        }
+
+        var spoken: String {
+            switch self {
+            case .client: "Who is the client? Say their name, then tap Next."
+            case .address: "What is the address? Then tap Next."
+            case .job: "Now explain the job. Say what you did, and what each part costs. Tap Stop when you're done."
+            }
+        }
+
+        var kind: GuidedAnswer.Kind? {
+            switch self {
+            case .client: .client
+            case .address: .address
+            case .job: nil
+            }
+        }
+
+        var next: Step? {
+            switch self {
+            case .client: .address
+            case .address: .job
+            case .job: nil
+            }
+        }
+    }
+
+    private var guided: Bool { existingJob == nil && talkMeThrough }
 
     var body: some View {
         VStack(spacing: 32) {
@@ -28,15 +82,22 @@ struct RecordingView: View {
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
-        .onAppear { job = existingJob; begin() }
+        .onAppear {
+            job = existingJob
+            step = guided ? .client : .job
+            begin()
+        }
+        .onDisappear { prompt.stop() }
         .interactiveDismissDisabled()
     }
 
     private var recordingBody: some View {
         VStack(spacing: 32) {
-            Text(recorder.state == .paused ? "Paused" : "Listening…")
+            Text(guided ? step.title : recorder.state == .paused ? "Paused" : "Listening…")
                 .font(.largeTitle.bold())
-            Text(existingJob == nil && job == nil ? "Say who the job was for, what you did, and what each part costs."
+                .multilineTextAlignment(.center)
+            Text(guided ? (speaking ? "Listen…" : recorder.state == .paused ? "Paused" : step.hint)
+                 : existingJob == nil && job == nil ? "Say who the job was for, what you did, and what each part costs."
                  : "Add anything you forgot, or fix something. For example: \"the floor was 200\".")
                 .font(.title3)
                 .multilineTextAlignment(.center)
@@ -61,14 +122,30 @@ struct RecordingView: View {
                 Text(errorMessage).font(.title3).foregroundStyle(.red).multilineTextAlignment(.center)
             }
 
-            Button(action: stop) {
-                Label("Stop", systemImage: "stop.fill")
-                    .font(.largeTitle.bold())
-                    .frame(maxWidth: .infinity, minHeight: 96)
+            if guided, step.next != nil {
+                Button { finishStep(keep: true) } label: {
+                    Label("Next", systemImage: "arrow.right")
+                        .font(.largeTitle.bold())
+                        .frame(maxWidth: .infinity, minHeight: 96)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .disabled(recorder.state == .idle)
+
+                Button("Skip this") { finishStep(keep: false) }
+                    .font(.title2)
+                    .frame(minHeight: 56)
+                    .disabled(recorder.state == .idle)
+            } else {
+                Button(action: stop) {
+                    Label("Stop", systemImage: "stop.fill")
+                        .font(.largeTitle.bold())
+                        .frame(maxWidth: .infinity, minHeight: 96)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .disabled(recorder.state == .idle)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-            .disabled(recorder.state == .idle)
 
             Button(recorder.state == .paused ? "Resume" : "Pause") {
                 recorder.state == .paused ? recorder.resume() : recorder.pause()
@@ -133,6 +210,13 @@ struct RecordingView: View {
 
     private func begin() {
         Task {
+            // Ask the question out loud once per step, then listen.
+            if guided, spokenStep != step {
+                spokenStep = step
+                speaking = true
+                await prompt.say(step.spoken)
+                speaking = false
+            }
             do {
                 try await recorder.start()
                 errorMessage = nil
@@ -150,19 +234,35 @@ struct RecordingView: View {
             if job == nil { onFinish(nil) } else { phase = .saved }
             return
         }
-        // The job may have been removed meanwhile (its first clip turned out to be silence).
-        if let current = job, current.isGone { job = nil }
         // Silence (a pocket, a quiet room, the mic covered): don't make a recording or a job.
         guard clip.heardSound else {
             try? FileManager.default.removeItem(at: AudioStorage.directory.appendingPathComponent(clip.fileName))
             phase = .nothingHeard
             return
         }
-        if let job {
-            processor.add(fileName: clip.fileName, duration: clip.duration, to: job)
-        } else {
-            job = processor.startNewJob(fileName: clip.fileName, duration: clip.duration)
-        }
+        save(clip.fileName, duration: clip.duration, answering: nil)
         phase = .saved
+    }
+
+    /// Ends the client or address step and moves on. Silence or "Skip this" saves nothing.
+    private func finishStep(keep: Bool) {
+        guard let clip = recorder.stop(deactivate: false) else { return }
+        if keep, clip.heardSound, clip.duration >= 1 {
+            save(clip.fileName, duration: clip.duration, answering: step.kind)
+        } else {
+            try? FileManager.default.removeItem(at: AudioStorage.directory.appendingPathComponent(clip.fileName))
+        }
+        if let next = step.next { step = next }
+        begin()
+    }
+
+    private func save(_ fileName: String, duration: TimeInterval, answering kind: GuidedAnswer.Kind?) {
+        // The job may have been removed meanwhile (an earlier clip turned out to be silence).
+        if let current = job, current.isGone { job = nil }
+        if let job {
+            processor.add(fileName: fileName, duration: duration, to: job, answering: kind)
+        } else {
+            job = processor.startNewJob(fileName: fileName, duration: duration, answering: kind)
+        }
     }
 }

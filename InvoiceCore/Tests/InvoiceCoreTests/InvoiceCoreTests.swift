@@ -524,4 +524,14 @@ final class AccountingExportTests: XCTestCase {
         XCTAssertTrue(text.contains("NOTES\nCheck gutter price"))
         XCTAssertTrue(record.html().contains("&lt;") == false)
     }
+
+    // MARK: Guided answers
+
+    func testGuidedAnswers() {
+        XCTAssertEqual(GuidedAnswer.value(.client, from: "mary johnson."), "Mary Johnson")
+        XCTAssertEqual(GuidedAnswer.value(.client, from: "Client name is Mary Johnson"), "Mary Johnson")
+        XCTAssertEqual(GuidedAnswer.value(.address, from: "The address is 12 Oak Street."), "12 Oak Street")
+        XCTAssertEqual(GuidedAnswer.value(.address, from: "12 Oak Street, Springfield"), "12 Oak Street, Springfield")
+        XCTAssertNil(GuidedAnswer.value(.client, from: " . "))
+    }
 }

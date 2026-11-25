@@ -19,16 +19,18 @@ final class JobProcessor {
 
     /// Creates a new job holding this recording, and starts processing it.
     @discardableResult
-    func startNewJob(fileName: String, duration: TimeInterval) -> Job {
+    func startNewJob(fileName: String, duration: TimeInterval, answering kind: GuidedAnswer.Kind? = nil) -> Job {
         let job = Job()
         context.insert(job)
-        add(fileName: fileName, duration: duration, to: job)
+        add(fileName: fileName, duration: duration, to: job, answering: kind)
         return job
     }
 
     /// Adds another recording to an existing job (an accidental stop, or something forgotten).
-    func add(fileName: String, duration: TimeInterval, to job: Job) {
+    /// `kind` is set when the clip answers the recorder's "Who is the client?" or "What's the address?".
+    func add(fileName: String, duration: TimeInterval, to job: Job, answering kind: GuidedAnswer.Kind? = nil) {
         let recording = Recording(fileName: fileName, duration: duration)
+        recording.guidedKindRaw = kind?.rawValue ?? ""
         context.insert(recording)
         recording.job = job
         if job.status == .invoiced { job.status = .draft }
@@ -129,6 +131,15 @@ final class JobProcessor {
             recording.state = .extracting
             try? context.save()
             guard let job = recording.job else { return }
+
+            // An answer to "Who is the client?" or "What's the address?": no AI needed.
+            if let kind = recording.guidedKind {
+                applyGuidedAnswer(kind, recording: recording, job: job)
+                recording.state = .done
+                recording.lastError = ""
+                try? context.save()
+                return
+            }
             // Items this recording made before; replaced only once the new write-up has succeeded.
             let previous = rewritingItems ? job.items.filter { $0.sourceRecordingID == recording.id } : []
             // Number the current items so a spoken correction ("I meant living room") can point at one.
@@ -152,6 +163,22 @@ final class JobProcessor {
             recording.lastError = error.localizedDescription
         }
         try? context.save()
+    }
+
+    private func applyGuidedAnswer(_ kind: GuidedAnswer.Kind, recording: Recording, job: Job) {
+        let prefix = kind.label + ": "
+        let said = recording.transcript.hasPrefix(prefix) ? String(recording.transcript.dropFirst(prefix.count)) : recording.transcript
+        guard let value = GuidedAnswer.value(kind, from: said) else { return }
+        // Written with its label so the job record and later write-ups read clearly.
+        recording.transcript = prefix + value
+        switch kind {
+        case .client:
+            apply(ExtractionResult(clientName: value), to: job, from: recording)
+        case .address:
+            job.address = value
+            // The address can settle which past client this is, or help find their email.
+            apply(ExtractionResult(), to: job, from: recording)
+        }
     }
 
     /// Edits items in place for spoken corrections. `items` is the list the numbers refer to.

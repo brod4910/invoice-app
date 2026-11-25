@@ -5,6 +5,7 @@ struct SettingsView: View {
     @Environment(GmailClient.self) private var gmail
     @AppStorage(BusinessSettings.Key.name) private var name = ""
     @AppStorage(BusinessSettings.Key.recordEmail) private var recordEmail = ""
+    @AppStorage("recorder.talkMeThrough") private var talkMeThrough = true
     @AppStorage(BusinessSettings.Key.owner) private var owner = ""
     @AppStorage(BusinessSettings.Key.address) private var address = ""
     @AppStorage(BusinessSettings.Key.phone) private var phone = ""
@@ -59,6 +60,14 @@ struct SettingsView: View {
                 TextField("Email", text: $email)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
+            }
+
+            Section {
+                Toggle("Talk me through new jobs", isOn: $talkMeThrough)
+            } header: {
+                Text("Recording")
+            } footer: {
+                Text("When recording a new job, the phone asks out loud for the client, then the address, then the work.")
             }
 
             Section {
