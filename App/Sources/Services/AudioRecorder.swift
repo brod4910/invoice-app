@@ -1,5 +1,6 @@
 import AVFoundation
 import Observation
+import UIKit
 
 /// Records one clip at a time to an .m4a file. Pause/resume stays in the same file.
 @MainActor
@@ -18,6 +19,39 @@ final class AudioRecorder {
 
     private var recorder: AVAudioRecorder?
     private var timer: Timer?
+    /// True when a phone call or Siri paused the clip, so it picks up again on its own afterwards.
+    private var pausedByInterruption = false
+
+    init() {
+        // A phone call or alarm pauses the microphone. The clip so far is kept; recording
+        // carries on in the same file once the call ends.
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            let began = raw.flatMap(AVAudioSession.InterruptionType.init) == .began
+            MainActor.assumeIsolated { self?.handleInterruption(began: began) }
+        }
+    }
+
+    private func handleInterruption(began: Bool) {
+        if began {
+            guard state == .recording else { return }
+            recorder?.pause()
+            state = .paused
+            pausedByInterruption = true
+        } else if pausedByInterruption {
+            pausedByInterruption = false
+            try? AVAudioSession.sharedInstance().setActive(true)
+            if recorder?.record() == true { state = .recording }
+        }
+    }
+
+    /// The screen stays on while recording, so the phone doesn't lock mid-job. If it locks
+    /// anyway (side button, pocket), recording continues in the background.
+    private func keepScreenOn(_ on: Bool) {
+        UIApplication.shared.isIdleTimerDisabled = on
+    }
 
     static func requestPermission() async -> Bool {
         await AVAudioApplication.requestRecordPermission()
@@ -39,6 +73,8 @@ final class AudioRecorder {
         elapsed = 0
         loudestPower = -160
         state = .recording
+        pausedByInterruption = false
+        keepScreenOn(true)
         startTimer()
     }
 
@@ -78,6 +114,7 @@ final class AudioRecorder {
     func pause() {
         recorder?.pause()
         state = .paused
+        pausedByInterruption = false
     }
 
     func resume() {
@@ -99,6 +136,8 @@ final class AudioRecorder {
         currentFileName = nil
         state = .idle
         level = 0
+        pausedByInterruption = false
+        keepScreenOn(false)
         // Deactivating blocks briefly, so do it off the main thread to keep the UI responsive.
         if deactivate {
             Task.detached {
