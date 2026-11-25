@@ -486,6 +486,46 @@ final class AccountingExportTests: XCTestCase {
         XCTAssertNil(ContactEmailMatching.addressSearchTerm("Oak Street"))
     }
 
+    func testCompanyWithSeveralPeopleOffersChoices() {
+        // Mail found by searching "Crown Management": signatures mention it, domains are crownmgmt.com.
+        let fromVeronica = MailParticipants.parse(headers: ["Veronica Smith <veronica@crownmgmt.com>", "dad@gmail.com"])
+        let toEarle = MailParticipants.parse(headers: ["dad@gmail.com", "Earle Jones <earle@crownmgmt.com>, Veronica Smith <veronica@crownmgmt.com>"])
+        let newsletter = MailParticipants.parse(headers: ["news@hardware.com", "dad@gmail.com"])
+        let people = ContactEmailMatching.suggestions(name: "Crown Management", contacts: [],
+                                                      mails: [fromVeronica, toEarle, newsletter], ownEmail: "dad@gmail.com")
+        XCTAssertEqual(people.map(\.email), ["veronica@crownmgmt.com", "earle@crownmgmt.com"])
+        XCTAssertEqual(people.map(\.name), ["Veronica Smith", "Earle Jones"])
+        XCTAssertNil(ContactEmailMatching.clearChoice(people))
+
+        // Only one person at the company: filled in without asking.
+        let one = ContactEmailMatching.suggestions(name: "Crown Management", contacts: [],
+                                                   mails: [fromVeronica, newsletter], ownEmail: "dad@gmail.com")
+        XCTAssertEqual(ContactEmailMatching.clearChoice(one), "veronica@crownmgmt.com")
+
+        // Contacts saved with the company name.
+        let contacts = [ContactCandidate(names: ["Earle Jones", "Crown Management"], emails: ["earle@crownmgmt.com"]),
+                        ContactCandidate(names: ["Veronica Smith", "Crown Management"], emails: ["vsmith@gmail.com"])]
+        let saved = ContactEmailMatching.suggestions(name: "crown management", contacts: contacts, mails: [], ownEmail: nil)
+        XCTAssertEqual(Set(saved.map(\.email)), ["earle@crownmgmt.com", "vsmith@gmail.com"])
+        XCTAssertEqual(Set(saved.map(\.name)), ["Earle Jones", "Veronica Smith"])
+
+        // Nobody matches by name or domain: people in the mail are offered as weak choices, most often first.
+        let other = MailParticipants.parse(headers: ["Pat <pat@outlook.com>", "dad@gmail.com"])
+        let loose = ContactEmailMatching.suggestions(name: "Crown Management", contacts: [],
+                                                     mails: [other, other, newsletter], ownEmail: "dad@gmail.com")
+        XCTAssertEqual(loose.map(\.email), ["pat@outlook.com", "news@hardware.com"])
+        XCTAssertFalse(loose.contains(where: \.strong))
+        XCTAssertNil(ContactEmailMatching.clearChoice(loose))
+    }
+
+    func testDomainMatching() {
+        XCTAssertTrue(ContactEmailMatching.domainMatches("v@crownmgmt.com", keys: ["crown"]))
+        XCTAssertTrue(ContactEmailMatching.domainMatches("crownmanagement@gmail.com", keys: ["crown"]))
+        XCTAssertFalse(ContactEmailMatching.domainMatches("bob@other.com", keys: ["crown"]))
+        XCTAssertFalse(ContactEmailMatching.domainMatches("v@gmail.com", keys: ["crown"]))
+        XCTAssertEqual(ContactEmailMatching.distinctiveWords(["crown", "management", "llc"]), ["crown"])
+    }
+
     // MARK: Transcript cleanup
 
     func testFillerAndStuttersRemoved() {

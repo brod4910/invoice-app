@@ -3,31 +3,46 @@ import Foundation
 import InvoiceCore
 
 /// Finds a client's email: Google Contacts by name (saved contacts and people Dad has emailed),
-/// then the iPhone's contacts, then Dad's Gmail (by name, then by the job address).
-/// Read-only; fills in an email only when it's clear.
+/// then the iPhone's contacts, then Dad's Gmail (by name or company anywhere in the mail, then by
+/// the job address). Read-only. Fills in an email only when it's clear; otherwise offers choices.
 @MainActor
 enum ContactLookup {
     /// Set when the Google sign-in predates the contacts permission; Settings asks to sign in again.
     static let needsSignInKey = "contacts.needsGoogleSignIn"
 
-    static func email(forName name: String, address: String, ownEmail: String?) async -> String? {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-        let google = await googleCandidates(trimmed)
-        if let found = ContactEmailMatching.pick(name: trimmed, candidates: google) { return found }
-        let phone = await phoneCandidates(trimmed)
-        if let found = ContactEmailMatching.pick(name: trimmed, candidates: google + phone) { return found }
+    enum Outcome: Equatable {
+        /// One clear email.
+        case found(String)
+        /// Several people could be the client (a company with a few contacts). Dad picks one.
+        case choices([EmailSuggestion])
+        case none
+    }
 
-        // Mail by name: people in From/To/Cc whose display name matches.
+    static func lookUp(name: String, address: String, ownEmail: String?) async -> Outcome {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return .none }
+        let contacts = await googleCandidates(trimmed) + phoneCandidates(trimmed)
+        let fromContacts = ContactEmailMatching.suggestions(name: trimmed, contacts: contacts, mails: [], ownEmail: ownEmail)
+        if let clear = ContactEmailMatching.clearChoice(fromContacts) { return .found(clear) }
+
+        // Gmail searches the whole message, so this finds mail where "Crown Management" is in a
+        // signature or the text, not just the sender's name. Domains like @crownmgmt.com count too.
         let byName = await mailParticipants(query: "\"\(trimmed)\"", ownEmail: ownEmail)
-        if let found = ContactEmailMatching.pick(name: trimmed, candidates: byName.flatMap(\.people)) { return found }
+        let withMail = ContactEmailMatching.suggestions(name: trimmed, contacts: contacts, mails: byName, ownEmail: ownEmail)
+        if let clear = ContactEmailMatching.clearChoice(withMail) { return .found(clear) }
+        if withMail.contains(where: \.strong) { return .choices(withMail) }
 
         // Mail mentioning the job address, e.g. a client asking for a quote at "123 Oak".
+        var mails = byName
         if let term = ContactEmailMatching.addressSearchTerm(address) {
             let byAddress = await mailParticipants(query: "\"\(term)\"", ownEmail: ownEmail)
-            return ContactEmailMatching.pickByAddress(mails: byAddress, ownEmail: ownEmail)
+            if withMail.isEmpty, let one = ContactEmailMatching.pickByAddress(mails: byAddress, ownEmail: ownEmail) {
+                return .found(one)
+            }
+            mails += byAddress
         }
-        return nil
+        let loose = ContactEmailMatching.suggestions(name: trimmed, contacts: contacts, mails: mails, ownEmail: ownEmail)
+        return loose.isEmpty ? .none : .choices(loose)
     }
 
     // MARK: Gmail search
@@ -36,9 +51,9 @@ enum ContactLookup {
         guard GoogleAuth.shared.hasRefreshToken,
               let token = try? await GoogleAuth.shared.validAccessToken() else { return [] }
         var list = URLComponents(string: "https://gmail.googleapis.com/gmail/v1/users/me/messages")!
-        // Skip drafts (the app's own invoices) and chats; newest 10 is plenty.
+        // Skip drafts (the app's own invoices) and chats; the newest 20 is plenty.
         list.queryItems = [URLQueryItem(name: "q", value: "\(query) -in:drafts -in:chats"),
-                           URLQueryItem(name: "maxResults", value: "10")]
+                           URLQueryItem(name: "maxResults", value: "20")]
         guard let listed: MessageList = await get(list.url!, token: token) else { return [] }
         var mails: [MailParticipants] = []
         for ref in listed.messages ?? [] {

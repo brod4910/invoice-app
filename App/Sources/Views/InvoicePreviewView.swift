@@ -13,7 +13,7 @@ struct InvoicePreviewView: View {
     @State private var emailSearch: EmailSearch = .idle
     @Environment(JobProcessor.self) private var processor
 
-    enum EmailSearch { case idle, searching, found, notFound }
+    enum EmailSearch { case idle, searching, found, notFound, choose([EmailSuggestion]) }
 
     /// Reuse the job's earlier invoice number if it already has one, so numbers don't skip.
     private var number: Int {
@@ -122,9 +122,43 @@ extension InvoicePreviewView {
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal)
+        case .choose(let people):
+            emailChoices(people)
         case .idle:
             EmptyView()
         }
+    }
+
+    /// Several people for one client, like Veronica and Earle at Crown Management: Dad taps who
+    /// gets the invoice. It's saved on the client, so he's only asked once.
+    fileprivate func emailChoices(_ people: [EmailSuggestion]) -> some View {
+        let clientName = job.client?.name ?? "this client"
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("Who gets the invoice for \(clientName)?")
+                .font(.title3.bold())
+            ForEach(people) { person in
+                Button {
+                    guard let client = job.client else { return }
+                    client.email = person.email
+                    try? context.save()
+                    emailSearch = .found
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(person.name.isEmpty ? person.email : person.name).font(.title3.bold())
+                        if !person.name.isEmpty { Text(person.email).font(.body) }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+            }
+            Text(people.contains(where: \.strong)
+                 ? "None of these? Tap the client's name on the job screen to type it."
+                 : "These people were in emails that mention \(clientName). None of them? Tap the client's name on the job screen to type it.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
     }
 
     /// Fills a missing email when the invoice is opened, for jobs recorded before lookup existed
@@ -138,7 +172,11 @@ extension InvoicePreviewView {
         // Something was typed but looks wrong: leave it for Dad to fix, don't overwrite it.
         guard client.email.isEmpty else { return }
         emailSearch = .searching
-        emailSearch = await processor.findEmail(for: client, address: job.address) ? .found : .notFound
+        switch await processor.findEmail(for: client, address: job.address) {
+        case .found: emailSearch = .found
+        case .choices(let people): emailSearch = .choose(people)
+        case .none: emailSearch = client.email.isEmpty ? .notFound : .found
+        }
     }
 }
 
