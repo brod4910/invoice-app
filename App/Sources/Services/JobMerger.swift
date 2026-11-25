@@ -29,6 +29,9 @@ enum JobMerger {
         for invoice in source.invoices {
             invoice.job = target
         }
+        for media in source.media {
+            media.job = target
+        }
         if target.status == .invoiced || source.status == .invoiced {
             target.status = .draft
         }

@@ -8,7 +8,7 @@ struct InvoiceApp: App {
     @State private var gmail = GmailClient()
 
     init() {
-        let container = try! ModelContainer(for: Client.self, Job.self, Recording.self, LineItem.self, Invoice.self)
+        let container = try! ModelContainer(for: Client.self, Job.self, Recording.self, LineItem.self, Invoice.self, JobMedia.self)
         self.container = container
         _processor = State(initialValue: JobProcessor(context: container.mainContext))
     }
@@ -23,6 +23,7 @@ struct InvoiceApp: App {
                     await gmail.restore()
                     processor.removeEmptyJobs()
                     processor.mergeDuplicateClients()
+                    MediaImporter.removeOrphanedFiles(context: container.mainContext)
                     await processor.retryPending()
                 }
         }

@@ -101,7 +101,9 @@ public enum InvoiceRenderer {
     }
 
     /// The short email that carries the PDF.
-    public static func coverNoteText(_ doc: InvoiceDocument) -> String {
+    /// `photosAttached`: how many photos ride along as attachments.
+    /// `mediaLinks`: videos (and photos too big to attach) shared from Google Drive.
+    public static func coverNoteText(_ doc: InvoiceDocument, photosAttached: Int = 0, mediaLinks: [MediaLink] = []) -> String {
         let b = doc.business
         var lines: [String] = []
         let firstName = doc.clientName.split(separator: " ").first.map(String.init) ?? ""
@@ -110,6 +112,15 @@ public enum InvoiceRenderer {
         var main = "Attached is invoice #\(doc.formattedNumber) for \(Money.format(cents: doc.totalCents))"
         if let title = doc.jobTitle, !title.isEmpty { main += " for \(title.prefix(1).lowercased() + title.dropFirst())" }
         lines.append(main + ".")
+        if photosAttached > 0 {
+            lines.append("")
+            lines.append(photosAttached == 1 ? "A photo of the work is attached." : "Photos of the work are attached.")
+        }
+        if !mediaLinks.isEmpty {
+            lines.append("")
+            lines.append(mediaLinks.count == 1 ? "You can watch the video of the work here:" : "You can see the videos and photos of the work here:")
+            lines.append(contentsOf: mediaLinks.map { "\($0.title): \($0.url)" })
+        }
         if !b.paymentTerms.isEmpty { lines.append(""); lines.append(b.paymentTerms) }
         lines.append("")
         lines.append("Thank you for your business,")
@@ -118,9 +129,20 @@ public enum InvoiceRenderer {
         return lines.joined(separator: "\n")
     }
 
-    public static func coverNoteHTML(_ doc: InvoiceDocument) -> String {
-        let paragraphs = coverNoteText(doc).components(separatedBy: "\n\n")
-            .map { "<p style=\"margin:0 0 14px;\">\(escape($0))</p>" }
+    public static func coverNoteHTML(_ doc: InvoiceDocument, photosAttached: Int = 0, mediaLinks: [MediaLink] = []) -> String {
+        let paragraphs = coverNoteText(doc, photosAttached: photosAttached, mediaLinks: mediaLinks)
+            .components(separatedBy: "\n\n")
+            .map { paragraph in
+                var html = escape(paragraph)
+                // Turn each shared link into a tappable link with its title.
+                for link in mediaLinks {
+                    html = html.replacingOccurrences(
+                        of: escape("\(link.title): \(link.url)"),
+                        with: "<a href=\"\(escape(link.url))\">\(escape(link.title))</a>"
+                    )
+                }
+                return "<p style=\"margin:0 0 14px;\">\(html)</p>"
+            }
             .joined()
         return "<div style=\"font-family:Helvetica,Arial,sans-serif;font-size:15px;color:#222;\">\(paragraphs)</div>"
     }
@@ -159,5 +181,15 @@ public enum InvoiceRenderer {
             </tr>
 
         """
+    }
+}
+
+/// A photo or video shared by link instead of attached, e.g. "Video 1" -> a Google Drive link.
+public struct MediaLink: Equatable, Sendable {
+    public var title: String
+    public var url: String
+    public init(title: String, url: String) {
+        self.title = title
+        self.url = url
     }
 }

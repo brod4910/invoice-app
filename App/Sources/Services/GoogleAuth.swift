@@ -15,6 +15,8 @@ final class GoogleAuth: NSObject {
         "https://www.googleapis.com/auth/gmail.compose",
         // Read-only, to look up a client's email by name or job address.
         "https://www.googleapis.com/auth/gmail.readonly",
+        // Only files this app uploads (job videos), shared by link in the invoice email.
+        "https://www.googleapis.com/auth/drive.file",
         "https://www.googleapis.com/auth/contacts.readonly",
         "https://www.googleapis.com/auth/contacts.other.readonly",
     ]

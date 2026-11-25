@@ -534,4 +534,23 @@ final class AccountingExportTests: XCTestCase {
         XCTAssertEqual(GuidedAnswer.value(.address, from: "12 Oak Street, Springfield"), "12 Oak Street, Springfield")
         XCTAssertNil(GuidedAnswer.value(.client, from: " . "))
     }
+
+    // MARK: Media budget
+
+    func testMediaBudgetSkipsWhatDoesNotFit() {
+        let picked = MediaBudget.pick(sizes: [400_000, 15_000_000, 3_000_000, 500_000], limit: 17_000_000)
+        XCTAssertEqual(picked.attach, [0, 1, 3])
+        XCTAssertEqual(picked.skip, [2])
+    }
+
+    func testCoverNoteListsPhotosAndVideoLinks() {
+        let doc = InvoiceDocument(number: 7, date: Date(), business: BusinessInfo(), clientName: "Mary Johnson",
+                                  clientEmail: nil, jobAddress: nil, jobTitle: nil, lines: [], notes: nil)
+        let links = [MediaLink(title: "Video 1", url: "https://drive.google.com/file/d/abc/view")]
+        let text = InvoiceRenderer.coverNoteText(doc, photosAttached: 2, mediaLinks: links)
+        XCTAssertTrue(text.contains("Photos of the work are attached."))
+        XCTAssertTrue(text.contains("Video 1: https://drive.google.com/file/d/abc/view"))
+        XCTAssertTrue(InvoiceRenderer.coverNoteHTML(doc, photosAttached: 2, mediaLinks: links)
+            .contains("<a href=\"https://drive.google.com/file/d/abc/view\">Video 1</a>"))
+    }
 }

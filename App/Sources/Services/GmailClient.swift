@@ -58,31 +58,29 @@ final class GmailClient {
             signedInEmail = nil
             throw error
         }
-        let raw = MIMEMessage.base64URL(MIMEMessage.build(to: to, subject: subject, html: html, text: text, attachments: attachments))
+        // Sent through Gmail's upload endpoint as a plain email file, which allows large
+        // attachments (photos and videos); the normal endpoint is limited to a few MB.
+        let mime = Data(MIMEMessage.build(to: to, subject: subject, html: html, text: text, attachments: attachments).utf8)
 
         if let existingID, !existingID.isEmpty {
             // PUT replaces the whole draft. 404 means it was sent or deleted in Gmail.
-            let (status, id) = try await send(
-                method: "PUT",
-                path: "drafts/\(existingID)",
-                body: ["id": existingID, "message": ["raw": raw]],
-                token: token
-            )
+            let (status, id) = try await upload(method: "PUT", path: "drafts/\(existingID)", mime: mime, token: token)
             if (200..<300).contains(status), let id { return .updated(id: id) }
             if status != 404 { throw GmailError.failed(status) }
         }
 
-        let (status, id) = try await send(method: "POST", path: "drafts", body: ["message": ["raw": raw]], token: token)
+        let (status, id) = try await upload(method: "POST", path: "drafts", mime: mime, token: token)
         guard (200..<300).contains(status), let id else { throw GmailError.failed(status) }
         return .created(id: id, replacedMissing: !(existingID ?? "").isEmpty)
     }
 
-    private func send(method: String, path: String, body: [String: Any], token: String) async throws -> (Int, String?) {
-        var request = URLRequest(url: URL(string: "https://gmail.googleapis.com/gmail/v1/users/me/\(path)")!)
+    private func upload(method: String, path: String, mime: Data, token: String) async throws -> (Int, String?) {
+        var request = URLRequest(url: URL(string: "https://gmail.googleapis.com/upload/gmail/v1/users/me/\(path)?uploadType=media")!)
         request.httpMethod = method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.setValue("message/rfc822", forHTTPHeaderField: "Content-Type")
+        request.httpBody = mime
+        request.timeoutInterval = 300
 
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0

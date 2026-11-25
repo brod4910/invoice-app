@@ -30,6 +30,7 @@ enum InvoiceBuilder {
     static func fingerprint(for job: Job) -> String {
         var parts = [job.client?.name ?? job.clientNameHint, job.client?.email ?? "", job.displayAddress, job.title]
         parts += job.sortedItems.map { "\($0.itemDescription)|\($0.details)|\($0.quantity)|\($0.unitPriceCents ?? -1)" }
+        parts += job.sortedMedia.map { "media|\($0.fileName)" }
         return parts.joined(separator: "\n")
     }
 
@@ -48,13 +49,34 @@ enum InvoiceBuilder {
         let doc = document(for: job, number: number)
         let to = job.client?.email
         let pdf = MIMEMessage.Attachment(filename: doc.pdfFilename, mimeType: "application/pdf", data: InvoicePDF.make(doc))
+
+        // Photos ride along as attachments while they fit in Gmail's 25 MB. Videos, and any
+        // photos that don't fit, go to Google Drive and are linked in the email instead.
+        let photos = job.sortedMedia.filter { !$0.isVideo }
+        let fits = MediaBudget.pick(sizes: photos.map(\.byteSize))
+        var attachments = [pdf]
+        for (n, index) in fits.attach.enumerated() {
+            guard let data = try? Data(contentsOf: photos[index].fileURL) else { continue }
+            attachments.append(MIMEMessage.Attachment(filename: "Photo-\(n + 1).jpg", mimeType: "image/jpeg", data: data))
+        }
+        let shared = fits.skip.map { photos[$0] } + job.sortedMedia.filter(\.isVideo)
+        var links: [MediaLink] = []
+        var videoNumber = 0, photoNumber = fits.attach.count
+        for media in shared {
+            let title: String
+            if media.isVideo { videoNumber += 1; title = "Video \(videoNumber)" } else { photoNumber += 1; title = "Photo \(photoNumber)" }
+            let name = "Invoice \(doc.formattedNumber) - \(doc.clientName.isEmpty ? "job" : doc.clientName) - \(title).\(media.isVideo ? "mp4" : "jpg")"
+            links.append(MediaLink(title: title, url: try await DriveClient.shareLink(for: media, name: name)))
+            try? context.save()
+        }
+
         let result = try await gmail.saveDraft(
             replacing: existing?.gmailDraftID,
             to: to,
             subject: doc.subject,
-            html: InvoiceRenderer.coverNoteHTML(doc),
-            text: InvoiceRenderer.coverNoteText(doc),
-            attachments: [pdf]
+            html: InvoiceRenderer.coverNoteHTML(doc, photosAttached: attachments.count - 1, mediaLinks: links),
+            text: InvoiceRenderer.coverNoteText(doc, photosAttached: attachments.count - 1, mediaLinks: links),
+            attachments: attachments
         )
 
         let invoice: Invoice

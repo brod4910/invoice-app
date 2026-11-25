@@ -34,6 +34,7 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "The app records you describing each job so it can write the invoice."
+        INFOPLIST_KEY_NSCameraUsageDescription: "Take photos and videos of the work to attach to the invoice."
         INFOPLIST_KEY_NSContactsUsageDescription: "The app looks up a client's email address by name so the invoice is ready to send."
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "The app turns your recordings into text on this iPhone."
     info:

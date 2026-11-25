@@ -13,6 +13,8 @@ struct JobDetailView: View {
     @State private var editingItem: LineItem?
     @State private var deletingItem: LineItem?
     @State private var sayingAgain: Recording?
+    @State private var viewingMedia: JobMedia?
+    @State private var deletingMedia: JobMedia?
     @State private var editingClient = false
     @State private var pickingClient = false
     @State private var showMerge = false
@@ -63,14 +65,30 @@ struct JobDetailView: View {
                 .padding(.vertical, 8)
             }
 
+            // The three things Dad does on a job, together near the top.
             Section {
-                Button { showRecorder = true } label: {
-                    Label("Add more to this job", systemImage: "mic.fill")
-                        .font(.title2.bold())
-                        .frame(maxWidth: .infinity, minHeight: 64)
+                VStack(spacing: 12) {
+                    Button { showRecorder = true } label: {
+                        Label("Add more to this job", systemImage: "mic.fill")
+                            .font(.title2.bold())
+                            .frame(maxWidth: .infinity, minHeight: 64)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.green)
+
+                    AddMediaButtons(job: job)
+
+                    Button { showInvoice = true } label: {
+                        Label(job.latestInvoice.map { "View invoice #\(String(format: "%04d", $0.number))" } ?? "Make invoice",
+                              systemImage: "envelope.fill")
+                            .font(.title2.bold())
+                            .frame(maxWidth: .infinity, minHeight: 64)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                    .disabled(job.items.isEmpty)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
+                .buttonStyle(.borderless)
                 .listRowInsets(EdgeInsets())
             }
             .listRowBackground(Color.clear)
@@ -145,19 +163,7 @@ struct JobDetailView: View {
                 }
             }
 
-            Section {
-                Button { showInvoice = true } label: {
-                    Label(job.latestInvoice.map { "View invoice #\(String(format: "%04d", $0.number))" } ?? "Make invoice",
-                          systemImage: "envelope.fill")
-                        .font(.title2.bold())
-                        .frame(maxWidth: .infinity, minHeight: 64)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.blue)
-                .disabled(job.items.isEmpty)
-                .listRowInsets(EdgeInsets())
-            }
-            .listRowBackground(Color.clear)
+            JobMediaSection(job: job, onOpen: { viewingMedia = $0 }, onDelete: { deletingMedia = $0 })
 
             Section("What you said") {
                 ForEach(job.sortedRecordings) { recording in
@@ -197,6 +203,17 @@ struct JobDetailView: View {
         .fullScreenCover(item: $sayingAgain) { _ in
             // A new recording on the same job: what he says fixes or adds to the items already here.
             RecordingView(existingJob: job) { _ in sayingAgain = nil }
+        }
+        .fullScreenCover(item: $viewingMedia) { MediaViewer(media: $0) }
+        .sheet(item: $deletingMedia) { media in
+            DeleteConfirmView(
+                question: media.isVideo ? "Are you sure you want to delete this video?" : "Are you sure you want to delete this photo?",
+                name: job.displayTitle,
+                detail: nil,
+                deleteLabel: media.isVideo ? "Yes, delete video" : "Yes, delete photo"
+            ) {
+                MediaImporter.delete(media, context: context)
+            }
         }
         .sheet(item: $deletingItem) { item in
             DeleteConfirmView.forItem(item) {

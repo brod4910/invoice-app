@@ -47,6 +47,7 @@ final class Job {
     @Relationship(deleteRule: .cascade, inverse: \Recording.job) var recordings: [Recording] = []
     @Relationship(deleteRule: .cascade, inverse: \LineItem.job) var items: [LineItem] = []
     @Relationship(deleteRule: .cascade, inverse: \Invoice.job) var invoices: [Invoice] = []
+    @Relationship(deleteRule: .cascade, inverse: \JobMedia.job) var media: [JobMedia] = []
 
     init(jobDate: Date = Date()) {
         self.jobDate = jobDate
@@ -87,7 +88,9 @@ final class Job {
     var isProcessing: Bool { recordings.contains { $0.state == .transcribing || $0.state == .extracting } }
 
     /// True when only silence was recorded: nothing heard, nothing typed, nothing invoiced.
-    var isEmpty: Bool { recordings.isEmpty && items.isEmpty && invoices.isEmpty }
+    var isEmpty: Bool { recordings.isEmpty && items.isEmpty && invoices.isEmpty && media.isEmpty }
+
+    var sortedMedia: [JobMedia] { media.sorted { $0.addedAt < $1.addedAt } }
 
     /// True once the job has been deleted, so screens holding on to it can let go.
     var isGone: Bool { isDeleted || modelContext == nil }
@@ -175,6 +178,40 @@ final class Invoice {
         self.gmailDraftID = gmailDraftID
         self.totalCents = totalCents
         self.createdAt = Date()
+    }
+}
+
+/// A photo or video Dad added to a job. The file lives in Documents/Media.
+@Model
+final class JobMedia {
+    var id: UUID = UUID()
+    var job: Job?
+    var fileName: String = ""
+    /// "photo" or "video"
+    var kind: String = "photo"
+    var byteSize: Int = 0
+    var addedAt: Date = Date()
+    /// Set once a video (or an oversized photo) has been shared from Google Drive.
+    var driveFileID: String = ""
+    var driveLink: String = ""
+
+    init(fileName: String, kind: String, byteSize: Int) {
+        self.fileName = fileName
+        self.kind = kind
+        self.byteSize = byteSize
+        self.addedAt = Date()
+    }
+
+    var isVideo: Bool { kind == "video" }
+    var fileURL: URL { MediaStorage.directory.appendingPathComponent(fileName) }
+    var mimeType: String { isVideo ? "video/mp4" : "image/jpeg" }
+}
+
+enum MediaStorage {
+    static var directory: URL {
+        let url = URL.documentsDirectory.appendingPathComponent("Media", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
     }
 }
 

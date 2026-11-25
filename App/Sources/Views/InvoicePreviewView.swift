@@ -39,6 +39,11 @@ struct InvoicePreviewView: View {
             PDFPreview(data: InvoicePDF.make(doc))
 
             VStack(spacing: 12) {
+                if working, job.media.contains(where: { $0.isVideo && $0.driveLink.isEmpty }) {
+                    Text("Putting the videos on Google Drive. This can take a few minutes. Keep the app open.")
+                        .font(.title3)
+                        .multilineTextAlignment(.center)
+                }
                 if let message {
                     Text(message)
                         .font(.title3)
