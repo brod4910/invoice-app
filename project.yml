@@ -1,0 +1,66 @@
+name: InvoiceApp
+options:
+  bundleIdPrefix: com.example.invoiceapp
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/App.xcconfig
+  Release: Config/App.xcconfig
+packages:
+  InvoiceCore:
+    path: InvoiceCore
+targets:
+  InvoiceApp:
+    type: application
+    platform: iOS
+    sources:
+      - App/Sources
+      - App/Assets.xcassets
+    dependencies:
+      - package: InvoiceCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
+        DEVELOPMENT_TEAM: $(APP_TEAM_ID)
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+        MARKETING_VERSION: "1.0"
+        # Raise by 1 for every TestFlight upload (App Store Connect rejects a repeated build number).
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        INFOPLIST_KEY_CFBundleDisplayName: Invoices
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: "The app records you describing each job so it can write the invoice."
+        INFOPLIST_KEY_NSCameraUsageDescription: "Take photos and videos of the work to attach to the invoice."
+        INFOPLIST_KEY_NSContactsUsageDescription: "The app looks up a client's email address by name so the invoice is ready to send."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "The app turns your recordings into text on this iPhone."
+    info:
+      path: App/Resources/Info.plist
+      properties:
+        GoogleClientID: $(GOOGLE_CLIENT_ID)
+        GoogleRedirectScheme: $(GOOGLE_REVERSED_CLIENT_ID)
+        ExtractionProxyURL: $(EXTRACTION_PROXY_URL)
+        ExtractionAppToken: $(EXTRACTION_APP_TOKEN)
+        # Only standard HTTPS: skips the export-compliance question on every upload.
+        ITSAppUsesNonExemptEncryption: false
+  InvoiceCoreTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - InvoiceCore/Tests/InvoiceCoreTests
+    dependencies:
+      - package: InvoiceCore
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  InvoiceApp:
+    build:
+      targets:
+        InvoiceApp: all
+    test:
+      targets:
+        - InvoiceCoreTests

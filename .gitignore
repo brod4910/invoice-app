@@ -1,0 +1,14 @@
+# Xcode
+*.xcodeproj/
+xcuserdata/
+DerivedData/
+.build/
+.swiftpm/
+Config/Secrets.xcconfig
+
+# Proxy
+proxy/node_modules/
+proxy/.wrangler/
+proxy/.dev.vars
+.DS_Store
+App/Resources/Info.plist

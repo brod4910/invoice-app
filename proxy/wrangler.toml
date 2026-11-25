@@ -1,0 +1,8 @@
+name = "invoice-extract"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Secrets (set with `npx wrangler secret put <NAME>`):
+#   ANTHROPIC_API_KEY  - your Anthropic API key
+#   APP_TOKEN          - a long random string; the iOS app sends it so strangers can't use your key

@@ -1,0 +1,9 @@
+// Shared build settings. Personal values live in Secrets.xcconfig (not committed).
+APP_BUNDLE_ID = com.example.invoiceapp
+APP_TEAM_ID =
+GOOGLE_CLIENT_ID =
+GOOGLE_REVERSED_CLIENT_ID =
+EXTRACTION_PROXY_URL =
+EXTRACTION_APP_TOKEN =
+
+#include? "Secrets.xcconfig"
