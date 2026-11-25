@@ -25,6 +25,7 @@ struct InvoiceApp: App {
                     processor.mergeDuplicateClients()
                     MediaImporter.removeOrphanedFiles(context: container.mainContext)
                     await processor.retryPending()
+                    await MailDirectoryStore.shared.refreshIfNeeded()
                 }
         }
         .modelContainer(container)

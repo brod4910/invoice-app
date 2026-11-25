@@ -138,7 +138,7 @@ extension ContactEmailMatching {
     /// mail, or by an email domain like `@crownmgmt.com`. People who were only in an email that
     /// mentions the client come after, and are left out when any strong match exists.
     public static func suggestions(name: String, contacts: [ContactCandidate], mails: [MailParticipants],
-                                   ownEmail: String?, limit: Int = 4) -> [EmailSuggestion] {
+                                   known: [EmailSuggestion] = [], ownEmail: String?, limit: Int = 4) -> [EmailSuggestion] {
         let spoken = words(name)
         guard !spoken.isEmpty else { return [] }
         let keys = distinctiveWords(spoken)
@@ -159,9 +159,20 @@ extension ContactEmailMatching {
             found[email] = entry
         }
 
+        // From the address book built from Sent mail: already matched, counted by emails sent.
+        for person in known {
+            add(person.email, name: person.name, strong: true, mention: false)
+            if var entry = found[person.email.lowercased()] { entry.mentions += person.mentions; found[entry.email] = entry }
+        }
         for contact in contacts where contact.names.contains(where: { matches(spoken: spoken, contactName: $0) }) {
             let person = contact.names.first { !words($0).isEmpty && !matches(spoken: spoken, contactName: $0) }
             for email in contact.emails { add(email, name: person ?? contact.names.first, strong: true, mention: false) }
+        }
+        // A saved contact at the company's domain, even if the company isn't on the contact.
+        for contact in contacts {
+            for email in contact.emails where domainMatches(email, keys: keys) {
+                add(email, name: contact.names.first, strong: true, mention: false)
+            }
         }
         for mail in mails {
             var seen = Set<String>()

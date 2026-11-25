@@ -518,6 +518,33 @@ final class AccountingExportTests: XCTestCase {
         XCTAssertNil(ContactEmailMatching.clearChoice(loose))
     }
 
+    func testSentMailAddressBook() {
+        var book = EmailDirectory()
+        let day = Date(timeIntervalSince1970: 1_700_000_000)
+        book.record(MailParticipants.parse(headers: ["Veronica Smith <veronica@crownmgmt.com>"]), sentAt: day, ownEmail: "dad@gmail.com")
+        book.record(MailParticipants.parse(headers: ["veronica@crownmgmt.com, Earle <earle@crownmgmt.com>", "dad@gmail.com"]),
+                    sentAt: day.addingTimeInterval(60), ownEmail: "dad@gmail.com")
+        book.record(MailParticipants.parse(headers: ["Mary Johnson <mary@example.com>", "noreply@shop.com"]),
+                    sentAt: day.addingTimeInterval(120), ownEmail: "dad@gmail.com")
+        XCTAssertEqual(book.entries.count, 3)
+        XCTAssertEqual(book.entries["veronica@crownmgmt.com"]?.count, 2)
+        XCTAssertEqual(book.entries["veronica@crownmgmt.com"]?.name, "Veronica Smith")
+        XCTAssertEqual(book.syncedThrough, day.addingTimeInterval(120))
+
+        let crown = book.matches(name: "Crown Management")
+        XCTAssertEqual(crown.map(\.email), ["veronica@crownmgmt.com", "earle@crownmgmt.com"])
+        XCTAssertEqual(book.matches(name: "Mary Johnson").map(\.email), ["mary@example.com"])
+        XCTAssertTrue(book.matches(name: "Acme").isEmpty)
+
+        // Fed into the lookup: two people at Crown, so Dad is asked; Mary alone is filled in.
+        let picks = ContactEmailMatching.suggestions(name: "Crown Management", contacts: [], mails: [], known: crown, ownEmail: nil)
+        XCTAssertEqual(picks.map(\.email), ["veronica@crownmgmt.com", "earle@crownmgmt.com"])
+        XCTAssertNil(ContactEmailMatching.clearChoice(picks))
+        let mary = ContactEmailMatching.suggestions(name: "Mary Johnson", contacts: [], mails: [],
+                                                    known: book.matches(name: "Mary Johnson"), ownEmail: nil)
+        XCTAssertEqual(ContactEmailMatching.clearChoice(mary), "mary@example.com")
+    }
+
     func testDomainMatching() {
         XCTAssertTrue(ContactEmailMatching.domainMatches("v@crownmgmt.com", keys: ["crown"]))
         XCTAssertTrue(ContactEmailMatching.domainMatches("crownmanagement@gmail.com", keys: ["crown"]))

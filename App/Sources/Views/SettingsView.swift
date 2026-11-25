@@ -14,6 +14,7 @@ struct SettingsView: View {
     @AppStorage(BusinessSettings.Key.tax) private var taxPercent = 0.0
     @AppStorage(BusinessSettings.Key.nextInvoice) private var nextInvoice = 1
     @State private var gmailError: String?
+    private var mailDirectory = MailDirectoryStore.shared
 
     var body: some View {
         Form {
@@ -24,7 +25,14 @@ struct SettingsView: View {
                         Text("Sign out and sign in again so the app can look up client emails in your contacts and mail.")
                             .foregroundStyle(.orange)
                     }
-                    Button("Sign out", role: .destructive) { gmail.signOut() }
+                    LabeledContent("Address book from sent mail",
+                                   value: mailDirectory.isRefreshing ? "Updating…" : "\(mailDirectory.peopleCount) people")
+                    Button("Update address book now") { Task { await mailDirectory.refresh() } }
+                        .disabled(mailDirectory.isRefreshing)
+                    Button("Sign out", role: .destructive) {
+                        gmail.signOut()
+                        mailDirectory.clear()
+                    }
                 } else {
                     Button("Sign in to Gmail") {
                         Task {
@@ -32,6 +40,7 @@ struct SettingsView: View {
                                 try await gmail.signIn()
                                 gmailError = nil
                                 UserDefaults.standard.set(false, forKey: ContactLookup.needsSignInKey)
+                                await MailDirectoryStore.shared.refresh()
                             }
                             catch { gmailError = error.localizedDescription }
                         }
