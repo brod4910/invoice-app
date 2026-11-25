@@ -34,8 +34,6 @@ final class MailDirectoryStore {
 
     var peopleCount: Int { directory.entries.count }
 
-    func matches(name: String) -> [EmailSuggestion] { directory.matches(name: name) }
-
     func refreshIfNeeded() async {
         if let lastRefresh, Date().timeIntervalSince(lastRefresh) < 24 * 3600 { return }
         await refresh()

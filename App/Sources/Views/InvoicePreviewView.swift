@@ -153,7 +153,7 @@ extension InvoicePreviewView {
             }
             Text(people.contains(where: \.strong)
                  ? "None of these? Tap the client's name on the job screen to type it."
-                 : "These people were in emails that mention \(clientName). None of them? Tap the client's name on the job screen to type it.")
+                 : "These might be from \(clientName). None of them? Tap the client's name on the job screen to type it.")
                 .font(.body)
                 .foregroundStyle(.secondary)
         }

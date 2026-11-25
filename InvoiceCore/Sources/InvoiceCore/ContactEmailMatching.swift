@@ -50,7 +50,12 @@ public enum ContactEmailMatching {
 /// One email someone exchanged with Dad: who it was from and to, from the message headers.
 public struct MailParticipants: Equatable, Sendable {
     public var people: [ContactCandidate]
-    public init(people: [ContactCandidate]) { self.people = people }
+    /// Subject and Gmail's short preview of the text, used as a clue for who the client is.
+    public var snippet: String
+    public init(people: [ContactCandidate], snippet: String = "") {
+        self.people = people
+        self.snippet = snippet
+    }
 
     /// Parses From/To/Cc header values like `Mary Johnson <mary@x.com>, bob@y.com`.
     public static func parse(headers: [String]) -> MailParticipants {
@@ -117,130 +122,150 @@ public struct EmailSuggestion: Equatable, Sendable, Identifiable {
     public var email: String
     /// The person's name if known, e.g. "Veronica Smith".
     public var name: String
-    /// True when the name, company or email domain matches the client. False when the person
-    /// was only in an email that mentions the client.
+    /// True when the person is clearly the client (Claude was sure, or the contact's name matches).
+    /// False when it's only likely, so Dad confirms.
     public var strong: Bool
-    /// How many of the found emails this person was in.
-    public var mentions: Int
     public var id: String { email }
 
-    public init(email: String, name: String, strong: Bool, mentions: Int) {
+    public init(email: String, name: String, strong: Bool) {
         self.email = email
         self.name = name
         self.strong = strong
-        self.mentions = mentions
+    }
+}
+
+/// Asks Claude (through the proxy) which people in Dad's mail are the client. No rules about
+/// domains or initials: Claude reads names, signatures in the snippets and domains itself, so a
+/// rebrand like Crown Management at cmc.rent works the same as anything else.
+public struct EmailMatchRequest: Encodable, Equatable, Sendable {
+    public struct Person: Encodable, Equatable, Sendable {
+        public var email: String
+        public var name: String
+        public var sentCount: Int
+        public var snippets: [String]
+
+        enum CodingKeys: String, CodingKey {
+            case email, name, snippets
+            case sentCount = "sent_count"
+        }
+    }
+
+    public var clientName: String
+    public var jobAddress: String
+    public var people: [Person]
+
+    enum CodingKeys: String, CodingKey {
+        case people
+        case clientName = "client_name"
+        case jobAddress = "job_address"
+    }
+
+    /// Everyone worth asking about: people from contacts that matched the name, people in mail
+    /// that mentions the client or the address (with what the mail said), then the people Dad
+    /// emails most. Dad himself and automated senders are left out.
+    public static func make(clientName: String, jobAddress: String, contacts: [ContactCandidate],
+                            mails: [MailParticipants], frequent: [EmailDirectory.Entry],
+                            sentCounts: [String: Int], ownEmail: String?, limit: Int = 120) -> EmailMatchRequest {
+        let own = ownEmail?.lowercased()
+        var people: [Person] = []
+        var index: [String: Int] = [:]
+
+        func add(_ raw: String, name: String?, snippet: String?) {
+            let email = raw.trimmingCharacters(in: .whitespaces).lowercased()
+            guard email != own, EmailAddress.isPlausible(email), !ContactEmailMatching.isAutomated(email) else { return }
+            let cleanName = name?.trimmingCharacters(in: .whitespaces) ?? ""
+            let cleanSnippet = String((snippet ?? "").prefix(300))
+            if let i = index[email] {
+                if people[i].name.isEmpty { people[i].name = cleanName }
+                if !cleanSnippet.isEmpty, people[i].snippets.count < 3, !people[i].snippets.contains(cleanSnippet) {
+                    people[i].snippets.append(cleanSnippet)
+                }
+                return
+            }
+            guard people.count < limit else { return }
+            index[email] = people.count
+            people.append(Person(email: email, name: cleanName, sentCount: sentCounts[email] ?? 0,
+                                 snippets: cleanSnippet.isEmpty ? [] : [cleanSnippet]))
+        }
+
+        for contact in contacts {
+            let label = contact.names.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.joined(separator: ", ")
+            for email in contact.emails { add(email, name: label, snippet: nil) }
+        }
+        for mail in mails {
+            for person in mail.people {
+                for email in person.emails { add(email, name: person.names.first, snippet: mail.snippet) }
+            }
+        }
+        for entry in frequent { add(entry.email, name: entry.name, snippet: nil) }
+        return EmailMatchRequest(clientName: clientName, jobAddress: jobAddress, people: people)
+    }
+}
+
+public struct EmailMatchResponse: Decodable, Equatable, Sendable {
+    public struct Match: Decodable, Equatable, Sendable {
+        public var email: String
+        public var confidence: String
+    }
+    public var matches: [Match]
+
+    /// Claude's answer as choices, keeping only addresses that were asked about.
+    public func suggestions(for request: EmailMatchRequest) -> [EmailSuggestion] {
+        let byEmail = Dictionary(request.people.map { ($0.email, $0) }, uniquingKeysWith: { a, _ in a })
+        var seen = Set<String>()
+        let found = matches.compactMap { match -> EmailSuggestion? in
+            let email = match.email.lowercased()
+            guard let person = byEmail[email], seen.insert(email).inserted else { return nil }
+            return EmailSuggestion(email: email, name: person.name, strong: match.confidence == "sure")
+        }
+        // Sure first, then the ones he emails most.
+        return found.enumerated().sorted { a, b in
+            if a.element.strong != b.element.strong { return a.element.strong }
+            let ca = byEmail[a.element.email]?.sentCount ?? 0, cb = byEmail[b.element.email]?.sentCount ?? 0
+            return ca != cb ? ca > cb : a.offset < b.offset
+        }.map(\.element)
     }
 }
 
 extension ContactEmailMatching {
-    /// Everyone who could be the client, best first. A company client like "Crown Management"
-    /// often has several people; this finds them by contact name or company, by display name in
-    /// mail, or by an email domain like `@crownmgmt.com`. People who were only in an email that
-    /// mentions the client come after, and are left out when any strong match exists.
-    public static func suggestions(name: String, contacts: [ContactCandidate], mails: [MailParticipants],
-                                   known: [EmailSuggestion] = [], ownEmail: String?, limit: Int = 4) -> [EmailSuggestion] {
-        let spoken = words(name)
-        guard !spoken.isEmpty else { return [] }
-        let keys = distinctiveWords(spoken)
-        let short = initials(spoken)
-        let own = ownEmail?.lowercased()
-        var found: [String: EmailSuggestion] = [:]
-        var order: [String] = []
-
-        func add(_ rawEmail: String, name: String?, strong: Bool, mention: Bool) {
-            let email = rawEmail.trimmingCharacters(in: .whitespaces).lowercased()
-            guard email != own, EmailAddress.isPlausible(email), !isAutomated(email) else { return }
-            var entry = found[email] ?? EmailSuggestion(email: email, name: "", strong: false, mentions: 0)
-            if found[email] == nil { order.append(email) }
-            if entry.name.isEmpty, let name, !name.trimmingCharacters(in: .whitespaces).isEmpty {
-                entry.name = name.trimmingCharacters(in: .whitespaces)
-            }
-            entry.strong = entry.strong || strong
-            if mention { entry.mentions += 1 }
-            found[email] = entry
-        }
-
-        // From the address book built from Sent mail: already matched, counted by emails sent.
-        for person in known {
-            add(person.email, name: person.name, strong: true, mention: false)
-            if var entry = found[person.email.lowercased()] { entry.mentions += person.mentions; found[entry.email] = entry }
-        }
-        for contact in contacts where contact.names.contains(where: { matches(spoken: spoken, contactName: $0) }) {
-            let person = contact.names.first { !words($0).isEmpty && !matches(spoken: spoken, contactName: $0) }
-            for email in contact.emails { add(email, name: person ?? contact.names.first, strong: true, mention: false) }
-        }
-        // A saved contact at the company's domain, even if the company isn't on the contact.
-        for contact in contacts {
-            for email in contact.emails where domainMatches(email, keys: keys, initials: short) {
-                add(email, name: contact.names.first, strong: true, mention: false)
-            }
-        }
-        for mail in mails {
-            var seen = Set<String>()
-            for person in mail.people {
-                for email in person.emails where seen.insert(email.lowercased()).inserted {
-                    let byName = person.names.contains { matches(spoken: spoken, contactName: $0) }
-                    add(email, name: person.names.first, strong: byName || domainMatches(email, keys: keys, initials: short), mention: true)
-                }
-            }
-        }
-
-        let all = order.compactMap { found[$0] }
-        let strong = all.filter(\.strong)
-        let pool = strong.isEmpty ? all : strong
-        let ranked = pool.enumerated().sorted { a, b in
-            if a.element.mentions != b.element.mentions { return a.element.mentions > b.element.mentions }
-            return a.offset < b.offset
-        }.map(\.element)
-        return Array(ranked.prefix(limit))
-    }
-
     /// The single email to fill in without asking: exactly one strong suggestion.
     public static func clearChoice(_ suggestions: [EmailSuggestion]) -> String? {
         let strong = suggestions.filter(\.strong)
         return strong.count == 1 ? strong[0].email : nil
     }
 
-    /// Words that identify a company: "Crown Management LLC" -> ["crown"].
-    static func distinctiveWords(_ spoken: [String]) -> [String] {
-        let generic: Set<String> = [
-            "the", "and", "management", "mgmt", "property", "properties", "services", "service", "company",
-            "co", "inc", "llc", "ltd", "corp", "group", "realty", "real", "estate", "homes", "home",
-            "rentals", "rental", "apartments", "partners", "associates", "holdings", "enterprises",
-        ]
-        return spoken.filter { $0.count >= 4 && !generic.contains($0) }
-    }
+    /// Without Claude (no connection or no server): people from contacts whose name matches,
+    /// then people in mail that mentions the client, most often first. Only a name match is strong.
+    public static func localSuggestions(name: String, contacts: [ContactCandidate], mails: [MailParticipants],
+                                        ownEmail: String?, limit: Int = 4) -> [EmailSuggestion] {
+        let spoken = words(name)
+        guard !spoken.isEmpty else { return [] }
+        let own = ownEmail?.lowercased()
+        var found: [String: (suggestion: EmailSuggestion, count: Int, order: Int)] = [:]
 
-    /// The company's initials: "Crown Management" -> "cm", "Crown Management Company" -> "cmc".
-    static func initials(_ spoken: [String]) -> String {
-        let letters = spoken.filter { !["the", "and", "of", "a"].contains($0) }.compactMap(\.first)
-        return letters.count >= 2 ? String(letters) : ""
-    }
-
-    /// The company's word in the email's domain (`veronica@crownmgmt.com`) or, for free mail,
-    /// in the name before the @ (`crownmanagement@gmail.com`). Also the company's initials as the
-    /// domain, with at most one extra letter for a "Company" or "Co" left unsaid:
-    /// Crown Management -> `@cmc.rent`.
-    static func domainMatches(_ email: String, keys: [String], initials: String = "") -> Bool {
-        if !initials.isEmpty, let domain = email.lowercased().split(separator: "@").last,
-           !isFreeMail(String(domain)),
-           domain.split(separator: ".").dropLast().contains(where: { $0.hasPrefix(initials) && $0.count <= initials.count + 1 }) {
-            return true
+        func add(_ raw: String, name: String?, strong: Bool) {
+            let email = raw.trimmingCharacters(in: .whitespaces).lowercased()
+            guard email != own, EmailAddress.isPlausible(email), !isAutomated(email) else { return }
+            var entry = found[email] ?? (EmailSuggestion(email: email, name: "", strong: false), 0, found.count)
+            if entry.suggestion.name.isEmpty { entry.suggestion.name = name?.trimmingCharacters(in: .whitespaces) ?? "" }
+            entry.suggestion.strong = entry.suggestion.strong || strong
+            entry.count += 1
+            found[email] = entry
         }
-        guard !keys.isEmpty else { return false }
-        let parts = email.lowercased().split(separator: "@")
-        guard parts.count == 2 else { return false }
-        let domainLabels = parts[1].split(separator: ".").dropLast()
-        let isFree = isFreeMail(String(parts[1]))
-        let haystack = isFree ? String(parts[0]) : domainLabels.joined(separator: ".")
-        return keys.contains { haystack.contains($0) }
-    }
 
-    static func isFreeMail(_ domain: String) -> Bool {
-        let freeMail: Set<String> = [
-            "gmail", "googlemail", "yahoo", "hotmail", "outlook", "live", "msn", "icloud", "me", "mac",
-            "aol", "comcast", "att", "sbcglobal", "verizon", "cox", "charter", "proton", "protonmail",
-        ]
-        return domain.lowercased().split(separator: ".").dropLast().contains { freeMail.contains(String($0)) }
+        for contact in contacts where contact.names.contains(where: { matches(spoken: spoken, contactName: $0) }) {
+            let person = contact.names.first { !words($0).isEmpty && !matches(spoken: spoken, contactName: $0) }
+            for email in contact.emails { add(email, name: person ?? contact.names.first, strong: true) }
+        }
+        for mail in mails {
+            for person in mail.people {
+                let byName = person.names.contains { matches(spoken: spoken, contactName: $0) }
+                for email in person.emails { add(email, name: person.names.first, strong: byName) }
+            }
+        }
+        let all = found.values
+        let pool = all.contains(where: \.suggestion.strong) ? all.filter(\.suggestion.strong) : Array(all)
+        return pool.sorted { $0.count != $1.count ? $0.count > $1.count : $0.order < $1.order }
+            .prefix(limit).map(\.suggestion)
     }
 }

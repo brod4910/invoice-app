@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { SYSTEM_PROMPT, buildUserMessage } from "./prompt";
+import { MatchRequestSchema, matchWithClaude, type Matcher } from "./match";
 import { ExtractionRequestSchema, ExtractionSchema, type Extraction, type ExtractionRequest } from "./schema";
 
 export interface Env {
@@ -45,9 +46,14 @@ export class HttpError extends Error {
   }
 }
 
-export async function handleRequest(request: Request, env: Env, extract: Extractor = extractWithClaude): Promise<Response> {
+export async function handleRequest(
+  request: Request,
+  env: Env,
+  extract: Extractor = extractWithClaude,
+  match: Matcher = matchWithClaude,
+): Promise<Response> {
   const url = new URL(request.url);
-  if (url.pathname !== "/extract") return json({ error: "Not found" }, 404);
+  if (url.pathname !== "/extract" && url.pathname !== "/match-email") return json({ error: "Not found" }, 404);
   if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   if (!env.APP_TOKEN || !tokensMatch(request.headers.get("Authorization"), `Bearer ${env.APP_TOKEN}`)) {
@@ -60,10 +66,14 @@ export async function handleRequest(request: Request, env: Env, extract: Extract
   } catch {
     return json({ error: "Body must be JSON" }, 400);
   }
-  const parsed = ExtractionRequestSchema.safeParse(body);
-  if (!parsed.success) return json({ error: "Invalid request", issues: parsed.error.issues }, 400);
-
   try {
+    if (url.pathname === "/match-email") {
+      const parsed = MatchRequestSchema.safeParse(body);
+      if (!parsed.success) return json({ error: "Invalid request", issues: parsed.error.issues }, 400);
+      return json(await match(parsed.data, env), 200);
+    }
+    const parsed = ExtractionRequestSchema.safeParse(body);
+    if (!parsed.success) return json({ error: "Invalid request", issues: parsed.error.issues }, 400);
     return json(await extract(parsed.data, env), 200);
   } catch (err) {
     if (err instanceof HttpError) return json({ error: err.message }, err.status);

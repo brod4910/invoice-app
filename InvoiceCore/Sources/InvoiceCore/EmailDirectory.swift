@@ -39,16 +39,12 @@ public struct EmailDirectory: Codable, Equatable, Sendable {
         syncedThrough = max(syncedThrough ?? sentAt, sentAt)
     }
 
-    /// People whose name, company domain or email matches the client, most emailed first.
-    public func matches(name: String) -> [EmailSuggestion] {
-        let spoken = ContactEmailMatching.words(name)
-        guard !spoken.isEmpty else { return [] }
-        let keys = ContactEmailMatching.distinctiveWords(spoken)
-        let short = ContactEmailMatching.initials(spoken)
-        return entries.values
-            .filter { ContactEmailMatching.matches(spoken: spoken, contactName: $0.name)
-                || ContactEmailMatching.domainMatches($0.email, keys: keys, initials: short) }
+    /// The people Dad emails most, for Claude to consider alongside the mail search.
+    public func mostEmailed(_ count: Int) -> [Entry] {
+        Array(entries.values
             .sorted { $0.count != $1.count ? $0.count > $1.count : $0.lastSeen > $1.lastSeen }
-            .map { EmailSuggestion(email: $0.email, name: $0.name, strong: true, mentions: $0.count) }
+            .prefix(count))
     }
+
+    public var sentCounts: [String: Int] { entries.mapValues(\.count) }
 }

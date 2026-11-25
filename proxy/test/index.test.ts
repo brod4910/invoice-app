@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { handleRequest, HttpError, type Env, type Extractor } from "../src/index";
 import { buildUserMessage } from "../src/prompt";
+import { buildMatchMessage, type Matcher } from "../src/match";
 import { ExtractionSchema } from "../src/schema";
 
 const env: Env = { ANTHROPIC_API_KEY: "test", APP_TOKEN: "secret-token" };
@@ -94,5 +95,37 @@ describe("schema and prompt", () => {
     expect(withAll).toContain("<existing_items>\nPaint door");
     const bare = buildUserMessage({ transcript: "t", existing_items: [], known_clients: [] });
     expect(bare).toBe("<transcript>\nt\n</transcript>");
+  });
+});
+
+describe("match-email", () => {
+  const people = [
+    { email: "veronica@cmc.rent", name: "Veronica Smith", sent_count: 12, snippets: ["Re: Unit 4 - Veronica, Crown Management Co."] },
+    { email: "earle@cmc.rent", name: "Earle", sent_count: 3 },
+  ];
+
+  it("passes the people to the matcher and returns its answer", async () => {
+    let seen: unknown;
+    const fake: Matcher = async (r) => {
+      seen = r;
+      return { matches: [{ email: "veronica@cmc.rent", confidence: "sure" }] };
+    };
+    const res = await handleRequest(req({ client_name: "crown management", people }, "secret-token", "/match-email"), env, fakeExtract, fake);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ matches: [{ email: "veronica@cmc.rent", confidence: "sure" }] });
+    expect((seen as { people: { snippets: string[] }[] }).people[1].snippets).toEqual([]);
+  });
+
+  it("rejects a missing client name and a wrong token", async () => {
+    const fake: Matcher = async () => ({ matches: [] });
+    expect((await handleRequest(req({ people }, "secret-token", "/match-email"), env, fakeExtract, fake)).status).toBe(400);
+    expect((await handleRequest(req({ client_name: "x", people }, "nope", "/match-email"), env, fakeExtract, fake)).status).toBe(401);
+  });
+
+  it("lists every person with their snippets in the prompt", () => {
+    const text = buildMatchMessage({ client_name: "Crown Management", job_address: "", people: people.map((p) => ({ snippets: [], ...p })) });
+    expect(text).toContain("1. Veronica Smith <veronica@cmc.rent>, emailed 12 times");
+    expect(text).toContain("   - Re: Unit 4 - Veronica, Crown Management Co.");
+    expect(text).toContain("2. Earle <earle@cmc.rent>, emailed 3 times");
   });
 });

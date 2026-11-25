@@ -3,8 +3,9 @@ import Foundation
 import InvoiceCore
 
 /// Finds a client's email: Google Contacts by name (saved contacts and people Dad has emailed),
-/// then the iPhone's contacts, then Dad's Gmail (by name or company anywhere in the mail, then by
-/// the job address). Read-only. Fills in an email only when it's clear; otherwise offers choices.
+/// then the iPhone's contacts. If that isn't clear, it searches Dad's Gmail for the client and the
+/// job address and asks Claude which of those people, or the people he emails most, are the
+/// client. Read-only. Fills in an email only when it's clear; otherwise offers choices.
 @MainActor
 enum ContactLookup {
     /// Set when the Google sign-in predates the contacts permission; Settings asks to sign in again.
@@ -21,45 +22,58 @@ enum ContactLookup {
     static func lookUp(name: String, address: String, ownEmail: String?) async -> Outcome {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .none }
-        // The address book built from Sent mail ahead of time, then contacts.
-        let known = MailDirectoryStore.shared.matches(name: trimmed)
+        // A saved contact with exactly this name settles it without searching mail.
         let contacts = await googleCandidates(trimmed) + phoneCandidates(trimmed)
-        let fromContacts = ContactEmailMatching.suggestions(name: trimmed, contacts: contacts, mails: [],
-                                                            known: known, ownEmail: ownEmail)
+        let fromContacts = ContactEmailMatching.localSuggestions(name: trimmed, contacts: contacts, mails: [], ownEmail: ownEmail)
         if let clear = ContactEmailMatching.clearChoice(fromContacts) { return .found(clear) }
 
-        // Gmail searches the whole message, so this finds mail where "Crown Management" is in a
-        // signature or the text, not just the sender's name. Domains like @crownmgmt.com count too.
-        let byName = await mailParticipants(query: "\"\(trimmed)\"", ownEmail: ownEmail)
-        let withMail = ContactEmailMatching.suggestions(name: trimmed, contacts: contacts, mails: byName,
-                                                        known: known, ownEmail: ownEmail)
-        if let clear = ContactEmailMatching.clearChoice(withMail) { return .found(clear) }
-        if withMail.contains(where: \.strong) { return .choices(withMail) }
-
-        // Mail mentioning the job address, e.g. a client asking for a quote at "123 Oak".
-        var mails = byName
+        // Gmail searches whole messages, so this finds mail where the client is named in a
+        // signature or the text, whatever the email address looks like. Words not in quotes,
+        // so a slightly different spoken name still finds it.
+        var mails = await mailParticipants(query: trimmed)
         if let term = ContactEmailMatching.addressSearchTerm(address) {
-            let byAddress = await mailParticipants(query: "\"\(term)\"", ownEmail: ownEmail)
-            if withMail.isEmpty, let one = ContactEmailMatching.pickByAddress(mails: byAddress, ownEmail: ownEmail) {
-                return .found(one)
-            }
-            mails += byAddress
+            mails += await mailParticipants(query: "\"\(term)\"")
         }
-        let loose = ContactEmailMatching.suggestions(name: trimmed, contacts: contacts, mails: mails,
-                                                     known: known, ownEmail: ownEmail)
-        return loose.isEmpty ? .none : .choices(loose)
+
+        let book = MailDirectoryStore.shared.directory
+        let request = EmailMatchRequest.make(clientName: trimmed, jobAddress: address, contacts: contacts, mails: mails,
+                                             frequent: book.mostEmailed(60), sentCounts: book.sentCounts, ownEmail: ownEmail)
+        if let answer = await askClaude(request) {
+            let picks = answer.suggestions(for: request)
+            if let clear = ContactEmailMatching.clearChoice(picks) { return .found(clear) }
+            return picks.isEmpty ? .none : .choices(Array(picks.prefix(4)))
+        }
+
+        // No connection or no server: fall back to names in contacts and mail.
+        let local = ContactEmailMatching.localSuggestions(name: trimmed, contacts: contacts, mails: mails, ownEmail: ownEmail)
+        if let clear = ContactEmailMatching.clearChoice(local) { return .found(clear) }
+        return local.isEmpty ? .none : .choices(local)
+    }
+
+    /// Claude picks who is the client from the people found. Nil if the server can't be reached.
+    private static func askClaude(_ request: EmailMatchRequest) async -> EmailMatchResponse? {
+        guard !request.people.isEmpty, let url = AppConfig.extractionURL else { return nil }
+        var http = URLRequest(url: url.appendingPathComponent("match-email"))
+        http.httpMethod = "POST"
+        http.timeoutInterval = 60
+        http.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        http.setValue("Bearer \(AppConfig.appToken)", forHTTPHeaderField: "Authorization")
+        http.httpBody = try? JSONEncoder().encode(request)
+        guard let (data, response) = try? await URLSession.shared.data(for: http),
+              let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) else { return nil }
+        return try? JSONDecoder().decode(EmailMatchResponse.self, from: data)
     }
 
     // MARK: Gmail search
 
-    private static func mailParticipants(query: String, ownEmail: String?) async -> [MailParticipants] {
+    private static func mailParticipants(query: String) async -> [MailParticipants] {
         // Skip drafts (the app's own invoices) and chats; the newest 20 is plenty.
         await fetchMails(query: "\(query) -in:drafts -in:chats", limit: 20).map(\.mail)
     }
 
     /// Gmail messages matching a search, newest first, with who they were from and to.
     /// Reads only the From/To/Cc headers, a few at a time.
-    static func fetchMails(query: String, limit: Int, headers: [String] = ["From", "To", "Cc"]) async -> [(mail: MailParticipants, date: Date)] {
+    static func fetchMails(query: String, limit: Int, headers: [String] = ["From", "To", "Cc", "Subject"]) async -> [(mail: MailParticipants, date: Date)] {
         guard GoogleAuth.shared.hasRefreshToken,
               let token = try? await GoogleAuth.shared.validAccessToken() else { return [] }
         var ids: [String] = []
@@ -85,9 +99,12 @@ enum ContactLookup {
                             + headers.map { URLQueryItem(name: "metadataHeaders", value: $0) }
                         guard let message: Message = await get(one.url!, token: token) else { return nil }
                         let millis = Double(message.internalDate ?? "") ?? 0
-                        return (start + offset,
-                                MailParticipants.parse(headers: (message.payload?.headers ?? []).map(\.value)),
-                                Date(timeIntervalSince1970: millis / 1000))
+                        let all = message.payload?.headers ?? []
+                        var mail = MailParticipants.parse(
+                            headers: all.filter { ["from", "to", "cc"].contains($0.name.lowercased()) }.map(\.value))
+                        let subject = all.first { $0.name.lowercased() == "subject" }?.value ?? ""
+                        mail.snippet = [subject, message.snippet ?? ""].filter { !$0.isEmpty }.joined(separator: " - ")
+                        return (start + offset, mail, Date(timeIntervalSince1970: millis / 1000))
                     }
                 }
                 for await item in group { if let item { results.append(item) } }
@@ -117,6 +134,7 @@ enum ContactLookup {
         struct Header: Decodable { let name: String; let value: String }
         let payload: Payload?
         let internalDate: String?
+        let snippet: String?
     }
 
     // MARK: Google
